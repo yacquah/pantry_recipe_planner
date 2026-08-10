@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Environment
+.env
+.env.local
+
+# Spreadsheet lock files
+~$*.xlsx
+.~lock.*#
+
+# Dependencies (uncomment once the backend exists)
+# /node_modules
+# /vendor/bundle
+# /.bundle
