@@ -42,6 +42,12 @@ edited, `normalized` is derived from it.
    conversions live in their own table keyed by product.
 3. **Unknown is a value, not a zero.** Missing data returns `UNKNOWN` and forces
    a handled case. Zero is a lie that arithmetic will silently propagate.
+   (Stored as `NULL`, never a literal string — see ADR 002.)
+4. **Every aggregate reports its own exclusions.** A total that silently skips
+   `NULL` rows returns a plausible number nobody questions — more dangerous
+   than refusing to answer. Return shapes carry an `excluded` count and the UI
+   surfaces it: "3 items not counted." Flags nothing surfaces are decoration.
+   (ADR 002.)
 
 ## Status
 

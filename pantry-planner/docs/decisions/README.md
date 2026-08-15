@@ -17,10 +17,14 @@ the **rejected options**: three months from now the useful question is never
 | # | Title | Status |
 |---|-------|--------|
 | 001 | Expiry when unknown | Not yet written |
+| 002 | [Incomplete capture: land with NULL, report exclusions](002-incomplete-capture.md) | Accepted |
+| 003 | [Food leaves via an append-only event ledger](003-consumption-event-ledger.md) | Accepted |
 
 ## Candidates queued
 
-- Partial containers: how is "half a bag of rice" recorded? (seed row 1)
-- Unresolvable products: representing "a Lipton box" (seed row 6)
 - Rice substitution: are jasmine and basmati interchangeable? (seed rows 1, 7)
 - Density source: hardcoded table, or third-party lookup?
+- Lot granularity: does restocking the same product always open a new lot, or
+  may identical unopened packages share one? (ADR 003 assumes lot-level expiry)
+- Cached `qty_on_hand`: reconcile job cadence, and what happens when the cache
+  and the ledger disagree (ADR 003)
