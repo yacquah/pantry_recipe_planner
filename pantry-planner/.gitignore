@@ -11,6 +11,12 @@ Thumbs.db
 .env
 .env.local
 
+# Build artifacts — the database is regenerated from schema/*.sql by
+# schema/build.sh and is never source. Delete it freely.
+*.db
+*.sqlite
+*.sqlite3
+
 # Spreadsheet lock files
 ~$*.xlsx
 .~lock.*#

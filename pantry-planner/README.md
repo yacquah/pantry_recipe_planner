@@ -56,8 +56,8 @@ Week 1 — spec and schema design. No application code yet, by design.
 - [x] Real pantry inventoried by hand (11 items, `data/seed/`)
 - [x] `docs/spec.md` completed
 - [x] ADR 001: expiry when unknown
-- [ ] Schema drafted and seeded
-- [ ] Two target queries answerable in raw SQL
+- [x] Schema drafted and seeded
+- [x] Two target queries answerable in raw SQL
 
 ## What the seed data already taught me
 
@@ -74,7 +74,9 @@ Week 1 — spec and schema design. No application code yet, by design.
 ## Layout
 
 ```
-data/seed/     Hand-collected starting inventory
-docs/spec.md   What v1 does, and explicitly what it does not
+data/seed/       Hand-collected starting inventory
+docs/spec.md     What v1 does, and explicitly what it does not
+docs/schema.md   The logical model, and why it is shaped that way
 docs/decisions/  One record per significant choice, including rejected options
+schema/          DDL for the canonical store
 ```
