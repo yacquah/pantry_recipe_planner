@@ -22,11 +22,11 @@ the **rejected options**: three months from now the useful question is never
 | 004 | [The countable/measurable bridge, and where piece weights come from](004-countable-measurable-bridge.md) | Accepted |
 | 005 | [Local-first, with the ledger as its own outbox](005-local-first-sync.md) | Accepted |
 | 006 | [What v1 does not build](006-v1-scope-boundary.md) | Accepted |
+| 007 | [What a lot is, and when one splits](007-lot-granularity.md) | Accepted |
 
 ## Candidates queued
 
 - Rice substitution: are jasmine and basmati interchangeable? (seed rows 1, 7)
-- Lot granularity: does restocking the same product always open a new lot, or
-  may identical unopened packages share one? (ADR 003 assumes lot-level expiry)
+  — deferred by ADR 006; recipes reference own products, so v1 never asks
 - Cached `qty_on_hand`: reconcile job cadence, and what happens when the cache
   and the ledger disagree (ADR 003)
