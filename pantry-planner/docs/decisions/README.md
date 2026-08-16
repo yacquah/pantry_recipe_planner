@@ -16,14 +16,16 @@ the **rejected options**: three months from now the useful question is never
 
 | # | Title | Status |
 |---|-------|--------|
-| 001 | Expiry when unknown | Not yet written |
+| 001 | [Expiry when unknown](001-expiry-when-unknown.md) | Accepted |
 | 002 | [Incomplete capture: land with NULL, report exclusions](002-incomplete-capture.md) | Accepted |
 | 003 | [Food leaves via an append-only event ledger](003-consumption-event-ledger.md) | Accepted |
+| 004 | [The countable/measurable bridge, and where piece weights come from](004-countable-measurable-bridge.md) | Accepted |
+| 005 | [Local-first, with the ledger as its own outbox](005-local-first-sync.md) | Accepted |
+| 006 | [What v1 does not build](006-v1-scope-boundary.md) | Accepted |
 
 ## Candidates queued
 
 - Rice substitution: are jasmine and basmati interchangeable? (seed rows 1, 7)
-- Density source: hardcoded table, or third-party lookup?
 - Lot granularity: does restocking the same product always open a new lot, or
   may identical unopened packages share one? (ADR 003 assumes lot-level expiry)
 - Cached `qty_on_hand`: reconcile job cadence, and what happens when the cache

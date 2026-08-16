@@ -54,8 +54,8 @@ edited, `normalized` is derived from it.
 Week 1 — spec and schema design. No application code yet, by design.
 
 - [x] Real pantry inventoried by hand (11 items, `data/seed/`)
-- [ ] `docs/spec.md` completed
-- [ ] ADR 001: expiry when unknown
+- [x] `docs/spec.md` completed
+- [x] ADR 001: expiry when unknown
 - [ ] Schema drafted and seeded
 - [ ] Two target queries answerable in raw SQL
 
@@ -66,8 +66,10 @@ Week 1 — spec and schema design. No application code yet, by design.
 - Honey is recorded in grams but cooked in cups — the density case, live.
 - One row ("a Lipton box") has an ambiguous product, no quantity and no unit.
   Every real inventory has rows like this. The schema must represent it.
-- **Zero of 11 items have an expiry date.** The headline v1 feature currently
-  has no data to run on. See ADR 001.
+- **Zero of 11 items have an expiry date.** The headline v1 feature looked like
+  it had no data to run on — until ADR 001 separated "not applicable" from
+  "unknown". Rice and honey do not need dates; about one item (the wings)
+  actually does. The feature was defined too broadly, not starved of data.
 
 ## Layout
 
