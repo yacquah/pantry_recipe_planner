@@ -1,0 +1,161 @@
+# Schema
+
+The logical model. DDL lives in [`schema/001_canonical_mysql.sql`](../schema/001_canonical_mysql.sql);
+this file explains the parts that are not obvious from reading it.
+
+## Shape
+
+```
+product ──< product_barcode
+   │
+   ├──< lot ──< pantry_event >── recipe
+   │                                │
+   ├──< piece_weight_curated        └──< recipe_ingredient
+   ├──< density
+   └──< shelf_life_by_product
+
+shelf_life_by_class   (keyed by class, not product)
+```
+
+**product** is the identity of a food, independent of packaging — "Jasmine
+rice", "Clover honey". **lot** is a set of physically interchangeable units of
+that food sharing an expiry date and an open state (ADR 007). **pantry_event**
+is the append-only ledger; everything else is reference data.
+
+## The four load-bearing ideas
+
+**Quantity is not stored.** There is no `qty` column on `lot`. On-hand
+quantity is `SUM(pantry_event.delta_base_unit)` for that lot (ADR 003).
+`lot.qty_on_hand_cached` exists purely as a cache, written in the same
+transaction as the event, with a reconcile job to catch drift. If the cache
+and the ledger ever disagree, the ledger is right.
+
+**NULL means unknown, and nothing else does.** No sentinel strings, no zeros
+standing in for missing data (ADR 002). The corollary is a discipline the
+schema cannot enforce on its own: any aggregate over a nullable column must
+report how many rows it skipped (modelling rule 4).
+
+**Not applicable is not unknown.** `shelf_life_by_class.days IS NULL` means
+expiry does not apply to that class in that state — honey, rice, sealed cans.
+That is a completely different fact from "we don't know when this expires",
+and conflating them is what leaves a needs-attention list stuck at ten items
+forever (ADR 001).
+
+**Estimates are never written down.** `lot.expires_on` holds only dates a
+human actually read off a label. Everything else is derived at read time
+through the resolution chain and rendered with its provenance. A stored
+estimate is indistinguishable from a real date on the next read, and a user
+who trusts an invented date throws away good food — which would make the app
+a cause of the waste it exists to prevent.
+
+## Four choices worth explaining
+
+**`DECIMAL`, never `FLOAT`.** Binary floating point cannot represent 0.1
+exactly. A ledger that accumulates rounding error in a project whose premise
+is refusing to lie with numbers would be self-defeating.
+
+**Client-generated event IDs.** `pantry_event.id` is a UUIDv7 minted on the
+phone, not an auto-increment. This is what makes sync retries idempotent: when
+a response is lost the client retries, and the server upserts by an ID it did
+not invent. Auto-increment keys structurally cannot do this (ADR 005). UUIDv7
+also sorts by time, which suits a log.
+
+**A composite foreign key on `(lot_id, product_id)`.** `pantry_event`
+duplicates `product_id`, which the lot already knows. That denormalisation is
+made safe rather than merely documented: `lot` carries a redundant-looking
+`UNIQUE KEY (id, product_id)` so the event's foreign key can reference both
+columns at once. A row whose product disagrees with its lot cannot be
+inserted.
+
+**"If and only if" constraints.** `CHECK ((reason = 'WASTE') = (waste_reason
+IS NOT NULL))` compares two booleans, so it enforces both directions at once:
+waste events must carry a reason, and nothing else may. The same shape governs
+`observed_qty` on adjustments.
+
+## Derived, not stored
+
+- **On-hand quantity** — `SUM(delta_base_unit)` per lot, subject to the
+  checkpoint rule below.
+- **Balance after a recount** — an `ADJUSTMENT` is a checkpoint, so the
+  balance is the observed value plus only the deltas that occurred after it.
+  Late-arriving earlier events stay in the ledger and are excluded from the
+  balance (ADR 005).
+- **Effective expiry** — resolution chain: label date, else open date plus
+  opened shelf life, else acquisition date plus sealed shelf life, else not
+  applicable, else unknown (ADR 001).
+- **Piece weight** — resolution chain: `lot.measured_piece_weight_g`, else the
+  median of this user's past measured events, else `piece_weight_curated`,
+  else a vendored reference table (not in v1), else unknown (ADR 004).
+- **`lot.shelf_life_state`** — a generated column. Frozen outranks opened,
+  because freezing suspends spoilage: an opened bag in the freezer behaves
+  frozen, not opened.
+
+## The raw layer (MongoDB)
+
+Untrusted input lands here unmodified and is never edited. Normalisation reads
+from it and writes to MySQL; nothing downstream reads it directly.
+
+```json
+{
+  "_id": "018f3a...",
+  "captured_at": "2026-08-02T18:22:11.031Z",
+  "device_id": "iphone-yaw-1",
+  "source": "barcode" | "manual" | "notebook_import",
+  "barcode": "0016000275867",
+  "api_response": { },
+  "verbatim": "Two Indomie - 5 packs per bag",
+  "user_fields": { "canonical_name": "Indomie instant noodles" },
+  "resolution": {
+    "status": "resolved" | "pending_lookup" | "unresolvable",
+    "product_id": 3,
+    "resolved_at": "2026-08-02T18:22:14.900Z"
+  }
+}
+```
+
+`status: "pending_lookup"` is what an offline barcode scan produces: the
+capture succeeds immediately, the lookup happens on reconnect, and the result
+is *proposed* to the user rather than overwriting what they typed (ADR 005).
+
+There is no separate sync queue. Unacknowledged ledger events are the outbox.
+
+## What seeding real data changed
+
+Applying the 11 real items broke the draft schema in four places. Every one was
+the schema quietly asserting something nobody had observed:
+
+1. **`is_opened` had to be split from `opened_on`.** The jasmine rice is open,
+   but nobody wrote down when. One column could not hold that.
+2. **`is_frozen` had to become nullable.** Defaulting it to 0 would have
+   asserted "fresh" about the chicken wings when the truth was unknown — and
+   that single fact swings their shelf life from 3 days to 270.
+3. **`base_unit` and `shelf_life_class` had to become nullable.** ADR 002 makes
+   identity the only hard requirement, and the Lipton box has neither.
+4. **`qty_precision` had to become nullable**, tracking the delta. Precision
+   describes a number, and the Lipton box has no number to describe.
+
+A fifth arrived with the expiry capture: **`expires_on_precision`**, because
+three dates were printed year-and-month only, and a `DATE` column would have
+invented a day nobody saw.
+
+## Still open
+
+- **Chicken wing piece weight.** A *natural* countable, so no printed weight
+  exists to look up — ADR 004 tier 1 applies: weigh the bag once and divide by
+  10. This is now the only missing bridge, and the only thing blocking the
+  "Noodle bowl" recipe.
+- `opened_on` for the jasmine rice — known open, date unrecorded.
+- The chicken wings carry sell-by dates on the packaging that were not
+  transcribed. Low priority: a sell-by is the retailer's date and would not
+  drive alerts anyway (ADR 001).
+- Seed row 6 ("a Lipton box") stays unresolved **by design**. It is the
+  worst-case row the schema exists to represent, not a defect to clean up —
+  and it now demonstrates something useful: it carries a valid expiry date
+  while its product, unit and quantity all remain unknown.
+
+Resolved since the first draft: the tomato paste size (12 oz = 340 g, verified
+against the can, so the 170 g suspicion was wrong and there is no 1700 g
+error), the chicken wings being frozen, and both manufactured piece weights —
+Indomie packs at 85 g and granola pouches at 42 g, printed and verified.
+Both are recorded with `min_g = max_g = typical_g`, which is how an exact
+manufactured weight is distinguished from a natural distribution.
