@@ -107,6 +107,26 @@ INSERT INTO lot
         'Frozen, confirmed. Packaging carries sell-by dates, not transcribed - and a sell-by is the retailer''s date, so it would not drive alerts anyway (ADR 001).');
 
 -- ---------------------------------------------------------------------------
+-- Measurements taken after the initial capture.
+--
+-- ADR 004 tier 1: the bag of wings was weighed on 2026-08-20 at 35 oz = 992 g
+-- for 10 pieces, so 99.2 g each. This lands on the LOT rather than in
+-- piece_weight_curated, because it describes these actual wings rather than
+-- wings in general — and a natural countable has no printed weight to look up.
+--
+-- Two honest caveats: the scale read whole ounces, so the figure carries about
+-- +/-1.4 g per piece, and 35 oz is gross weight including the bag (a few grams
+-- of plastic, under 1%). Also worth noting that 99 g per piece is whole-wing
+-- territory; wing segments usually run 40-60 g, so "pieces" here probably
+-- means whole wings.
+-- ---------------------------------------------------------------------------
+UPDATE lot
+   SET measured_piece_weight_g = 99.2,
+       needs_review = 0,
+       notes = 'Frozen, confirmed. Bag weighed 35 oz (992 g gross) for 10 pieces on 2026-08-20 = 99.2 g each, ADR 004 tier 1. Packaging carries sell-by dates, not transcribed - a sell-by is the retailer''s date and would not drive alerts anyway (ADR 001).'
+ WHERE id = 11;
+
+-- ---------------------------------------------------------------------------
 -- Ledger — the initial capture. Quantity lives HERE, never on the lot.
 -- ---------------------------------------------------------------------------
 INSERT INTO pantry_event

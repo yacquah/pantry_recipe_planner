@@ -84,7 +84,7 @@ Application code next.
 **v1 build (next)**
 
 - [x] `raw_capture` table added to the device schema (ADR 008)
-- [ ] Weigh the frozen wings — the last missing count/mass bridge
+- [x] Weigh the frozen wings — the last missing count/mass bridge
 - [ ] Thin vertical slice: capture an item, derive its expiry, list it
 - [ ] Expiry notifications
 - [ ] Cook-tonight matcher

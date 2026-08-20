@@ -86,6 +86,23 @@ waste events must carry a reason, and nothing else may. The same shape governs
 - **Piece weight** — resolution chain: `lot.measured_piece_weight_g`, else the
   median of this user's past measured events, else `piece_weight_curated`,
   else a vendored reference table (not in v1), else unknown (ADR 004).
+
+  Whether an answer derived through this bridge may be stated *confidently*
+  depends on where the number came from, not on how comfortable the margin
+  looks. Three cases, and the reasoning is worth keeping:
+
+  - **Measured on the lot** — the per-piece figure is an average, but the
+    total it reconstructs is exact, because the total is what was weighed.
+    Aggregating back over the same set is lossless; it is dividing down to a
+    single piece that introduces error. Confident answers allowed.
+  - **Printed** (`min_g = max_g`) — a manufactured weight with no spread.
+    Exact in both directions.
+  - **Reference average** — genuinely approximate. Hedged answers only.
+
+  This refines ADR 004's "never confident across an approximate bridge" rather
+  than contradicting it: a measured total is not approximate for a total
+  comparison. If that distinction ever proves load-bearing, it deserves its own
+  record.
 - **`lot.shelf_life_state`** — a generated column. Frozen outranks opened,
   because freezing suspends spoilage: an opened bag in the freezer behaves
   frozen, not opened.
@@ -146,10 +163,9 @@ invented a day nobody saw.
 
 ## Still open
 
-- **Chicken wing piece weight.** A *natural* countable, so no printed weight
-  exists to look up — ADR 004 tier 1 applies: weigh the bag once and divide by
-  10. This is now the only missing bridge, and the only thing blocking the
-  "Noodle bowl" recipe.
+- **Basmati rice quantity.** The bag size was never recorded, so on-hand is
+  `NULL`. This is now the only unresolvable ingredient in the dataset, and it
+  needs a scale rather than a decision.
 - `opened_on` for the jasmine rice — known open, date unrecorded.
 - The chicken wings carry sell-by dates on the packaging that were not
   transcribed. Low priority: a sell-by is the retailer's date and would not
