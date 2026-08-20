@@ -85,7 +85,7 @@ Application code next.
 
 - [x] `raw_capture` table added to the device schema (ADR 008)
 - [x] Weigh the frozen wings — the last missing count/mass bridge
-- [ ] Thin vertical slice: capture an item, derive its expiry, list it
+- [x] Thin vertical slice: capture an item, derive its expiry, list it (`cli/`)
 - [ ] Expiry notifications
 - [ ] Cook-tonight matcher
 
@@ -113,5 +113,6 @@ data/seed/       Hand-collected starting inventory
 docs/spec.md     What v1 does, and explicitly what it does not
 docs/schema.md   The logical model, and why it is shaped that way
 docs/decisions/  One record per significant choice, including rejected options
-schema/          DDL for the canonical store
+schema/          DDL, seed, target queries, and build.sh
+cli/             Swift package — PantryCore library plus a headless CLI
 ```

@@ -17,6 +17,11 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Swift Package Manager output
+.build/
+.swiftpm/
+Package.resolved
+
 # Spreadsheet lock files
 ~$*.xlsx
 .~lock.*#
