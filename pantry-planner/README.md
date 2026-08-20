@@ -20,14 +20,33 @@ number first. That reconciliation is the project.
 Untrusted data lands raw, gets normalised at a single boundary, and only then
 enters the canonical store. Nothing downstream reads unvalidated data.
 
+That principle is a discipline, not a product of running two database engines,
+so it holds in a single file. **v1 has no server** (ADR 008) — one SQLite
+database on the phone:
+
+```
+iOS client (SQLite)
+    raw_capture (JSON, never edited)
+          |
+          v
+    Normalisation
+          |
+          v
+    Canonical tables  ->  Expiry chain
+          ^               Recipe matcher
+          |
+   Food data API (barcode lookup, optional — ADR 005)
+```
+
+**Phase 2 is the backend**, built once v1 is in daily use — against a schema,
+a dataset and a client that already exist, which is what makes sync and
+idempotency teachable rather than theoretical:
+
 ```
 iOS client  ->  Backend API  ->  MongoDB (raw blobs)  ->  Normalisation layer
                                         ^                        |
                                 Food data API                    v
                                                             MySQL (canonical)
-                                                                  |
-                                                                  v
-                                                          Recipe matcher
 ```
 
 The `data/seed/` spreadsheet mirrors this deliberately: `raw_capture` is never
@@ -51,13 +70,29 @@ edited, `normalized` is derived from it.
 
 ## Status
 
-Week 1 — spec and schema design. No application code yet, by design.
+Week 3 — design complete, schema built and proven against real data.
+Application code next.
+
+**Design (done)**
 
 - [x] Real pantry inventoried by hand (11 items, `data/seed/`)
-- [x] `docs/spec.md` completed
-- [x] ADR 001: expiry when unknown
-- [x] Schema drafted and seeded
+- [x] `docs/spec.md` completed — all seven questions answered
+- [x] Eight decision records, each with its rejected options
+- [x] Schema drafted in two dialects and seeded with the real pantry
 - [x] Two target queries answerable in raw SQL
+
+**v1 build (next)**
+
+- [ ] `raw_capture` table added to the device schema (ADR 008)
+- [ ] Weigh the frozen wings — the last missing count/mass bridge
+- [ ] Thin vertical slice: capture an item, derive its expiry, list it
+- [ ] Expiry notifications
+- [ ] Cook-tonight matcher
+
+**Phase 2 (committed, not started)**
+
+- [ ] Backend API, raw layer, normalisation service, canonical store —
+      triggered by v1 being in daily use (ADR 008)
 
 ## What the seed data already taught me
 

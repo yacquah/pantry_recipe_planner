@@ -23,10 +23,15 @@ the **rejected options**: three months from now the useful question is never
 | 005 | [Local-first, with the ledger as its own outbox](005-local-first-sync.md) | Accepted |
 | 006 | [What v1 does not build](006-v1-scope-boundary.md) | Accepted |
 | 007 | [What a lot is, and when one splits](007-lot-granularity.md) | Accepted |
+| 008 | [v1 ships without a server; the backend is phase 2](008-no-server-in-v1.md) | Accepted |
 
 ## Candidates queued
 
 - Rice substitution: are jasmine and basmati interchangeable? (seed rows 1, 7)
   — deferred by ADR 006; recipes reference own products, so v1 never asks
+- Does the raw layer need MongoDB at all, given it works as a JSON column in
+  SQLite? (phase 2, raised by ADR 008)
+- Cached `qty_on_hand`: reconcile job cadence, and what happens when the cache
+  and the ledger disagree (ADR 003)
 - Cached `qty_on_hand`: reconcile job cadence, and what happens when the cache
   and the ledger disagree (ADR 003)
