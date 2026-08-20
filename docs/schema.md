@@ -6,13 +6,13 @@ this file explains the parts that are not obvious from reading it.
 ## Shape
 
 ```
-product ──< product_barcode
-   │
-   ├──< lot ──< pantry_event >── recipe
-   │                                │
-   ├──< piece_weight_curated        └──< recipe_ingredient
-   ├──< density
-   └──< shelf_life_by_product
+raw_capture  ──(normalisation)──>  product ──< product_barcode
+(untrusted, append-only)              │
+                                      ├──< lot ──< pantry_event >── recipe
+                                      │                                │
+                                      ├──< piece_weight_curated        └──< recipe_ingredient
+                                      ├──< density
+                                      └──< shelf_life_by_product
 
 shelf_life_by_class   (keyed by class, not product)
 ```
@@ -90,32 +90,38 @@ waste events must carry a reason, and nothing else may. The same shape governs
   because freezing suspends spoilage: an opened bag in the freezer behaves
   frozen, not opened.
 
-## The raw layer (MongoDB)
+## The raw layer
 
-Untrusted input lands here unmodified and is never edited. Normalisation reads
-from it and writes to MySQL; nothing downstream reads it directly.
+Untrusted input lands in `raw_capture` unmodified. Normalisation reads from it
+and writes the canonical tables; nothing downstream reads it directly.
 
-```json
-{
-  "_id": "018f3a...",
-  "captured_at": "2026-08-02T18:22:11.031Z",
-  "device_id": "iphone-yaw-1",
-  "source": "barcode" | "manual" | "notebook_import",
-  "barcode": "0016000275867",
-  "api_response": { },
-  "verbatim": "Two Indomie - 5 packs per bag",
-  "user_fields": { "canonical_name": "Indomie instant noodles" },
-  "resolution": {
-    "status": "resolved" | "pending_lookup" | "unresolvable",
-    "product_id": 3,
-    "resolved_at": "2026-08-02T18:22:14.900Z"
-  }
-}
-```
+In v1 this is a table in the same SQLite file, with the untrusted blob in a
+JSON `payload` column (ADR 008). In phase 2 the role moves to MongoDB, which is
+why the canonical MySQL schema has no equivalent — a planned asymmetry, not
+drift. The principle was never "use a document store"; it is that untrusted
+data lands raw and is normalised at exactly one boundary.
 
-`status: "pending_lookup"` is what an offline barcode scan produces: the
-capture succeeds immediately, the lookup happens on reconnect, and the result
-is *proposed* to the user rather than overwriting what they typed (ADR 005).
+Three things make it more than a log table:
+
+**Content and metadata are separated.** `payload` and `verbatim` hold what was
+captured. Every other column is metadata *about* the capture — when, from which
+device, whether the barcode has been looked up, whether normalisation has run.
+
+**"Never edited" is enforced, not just documented.** A `BEFORE UPDATE` trigger
+aborts any attempt to change `payload`, `verbatim`, `barcode`, `source`,
+`captured_at` or `device_id`. Resolution and normalisation columns stay
+mutable, because those record what the system has *done* with a capture rather
+than what was captured.
+
+**The backlogs are queries, not guesses.** Two partial indexes cover the only
+two work queues that exist: scans awaiting a barcode lookup
+(`lookup_status = 'pending'` — what an offline scan produces, per ADR 005) and
+captures awaiting normalisation (`normalised_at IS NULL`).
+
+The seed loads all 11 verbatim notebook lines, each linked to the product and
+lot it became. Row 6 is the one to look at: *"One Lipton box"* is a complete
+and faithful capture of an ambiguous reality, and the canonical row derived
+from it is honest about how little it knows.
 
 There is no separate sync queue. Unacknowledged ledger events are the outbox.
 

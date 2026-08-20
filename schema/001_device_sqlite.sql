@@ -117,6 +117,71 @@ CREATE TABLE pantry_event (
 CREATE INDEX ix_event_lot_time ON pantry_event(lot_id, occurred_at);
 CREATE INDEX ix_event_reason   ON pantry_event(reason, occurred_at);
 
+-- ---------------------------------------------------------------------------
+-- raw_capture — the untrusted side of the boundary (ADR 008).
+--
+-- Everything arrives here first and is never edited. Normalisation reads from
+-- this table and writes the canonical ones; nothing downstream reads it.
+--
+-- In phase 2 this role moves to MongoDB, which is why the canonical MySQL
+-- schema has no equivalent. The principle was never "use a document store" —
+-- it is that untrusted data lands raw and is normalised at a single boundary,
+-- and that holds perfectly well in a JSON column.
+-- ---------------------------------------------------------------------------
+CREATE TABLE raw_capture (
+  id            TEXT PRIMARY KEY,        -- client-minted UUIDv7, as for events
+  captured_at   TEXT NOT NULL,
+  device_id     TEXT NOT NULL,
+  source        TEXT NOT NULL CHECK (source IN
+                  ('barcode','manual','notebook_import')),
+  barcode       TEXT NULL,
+
+  -- Exactly what the human wrote, character for character. "Two Indomie -
+  -- 5 packs per bag" is the record; every structured field is an
+  -- interpretation of it, and interpretations can be wrong.
+  verbatim      TEXT NULL,
+
+  -- The complete untrusted blob: API response, user-entered fields, whatever
+  -- the source produced. Content lives here; the columns around it are
+  -- metadata ABOUT the capture, not content OF it.
+  payload       TEXT NOT NULL CHECK (json_valid(payload)),
+
+  -- Barcode lookup (ADR 005). An offline scan lands 'pending' and resolves on
+  -- reconnect, at which point the result is PROPOSED to the user rather than
+  -- silently overwriting what they typed.
+  lookup_status TEXT NOT NULL DEFAULT 'not_applicable'
+                  CHECK (lookup_status IN
+                    ('not_applicable','pending','resolved','unresolvable')),
+  lookup_at     TEXT NULL,
+
+  -- What normalisation produced. NULL until this row has been promoted, which
+  -- is what makes the un-normalised backlog a query rather than a guess.
+  product_id    INTEGER NULL REFERENCES product(id),
+  lot_id        INTEGER NULL REFERENCES lot(id),
+  normalised_at TEXT NULL,
+
+  CHECK (barcode IS NOT NULL OR lookup_status = 'not_applicable'),
+  CHECK ((normalised_at IS NULL) = (product_id IS NULL))
+);
+
+-- The two work queues, as partial indexes: scans awaiting a lookup, and
+-- captures awaiting normalisation.
+CREATE INDEX ix_raw_pending_lookup ON raw_capture(captured_at)
+  WHERE lookup_status = 'pending';
+CREATE INDEX ix_raw_unnormalised   ON raw_capture(captured_at)
+  WHERE normalised_at IS NULL;
+
+-- "Never edited" enforced rather than merely documented. Resolution and
+-- normalisation metadata may still be updated — those are facts about what
+-- the system has DONE with the capture, not about what was captured.
+CREATE TRIGGER trg_raw_capture_immutable
+BEFORE UPDATE OF payload, verbatim, barcode, source, captured_at, device_id
+ON raw_capture
+BEGIN
+  SELECT RAISE(ABORT,
+    'raw_capture is append-only: captured content cannot be edited');
+END;
+
 -- days IS NULL means NOT APPLICABLE, which is not the same as unknown.
 CREATE TABLE shelf_life_by_class (
   shelf_life_class TEXT NOT NULL,

@@ -13,6 +13,11 @@
 --     (ADR 003); lot.qty_on_hand_cached is a cache, never the truth.
 --
 -- Requires 8.0.16 or later: CHECK constraints are parsed but ignored before it.
+--
+-- There is deliberately no raw_capture table here. The device schema has one
+-- (a JSON column in SQLite); on the server that role belongs to MongoDB. This
+-- is a planned asymmetry, not drift — the two files are otherwise kept in
+-- lockstep, per ADR 008.
 
 SET NAMES utf8mb4;
 

@@ -128,6 +128,65 @@ INSERT INTO pantry_event
   ('0191a6c0-000b-7000-8000-00000000000b', 11, 11,   10, 'CAPTURE', NULL, 'measured',  NULL, NULL, '2026-08-02T18:25:09.888', 'iphone-yaw-1');
 
 -- ---------------------------------------------------------------------------
+-- Raw layer — the 11 verbatim lines from the handwritten notebook, exactly as
+-- written, each linked to the product and lot normalisation produced from it.
+--
+-- This is the whole architecture in one table: nobody edits these strings, and
+-- every structured field elsewhere in the database is an interpretation of one
+-- of them. Row 6 is the point — "One Lipton box" is a complete, faithful
+-- capture of an ambiguous reality, and the canonical row it produced is
+-- honest about how little it knows.
+-- ---------------------------------------------------------------------------
+INSERT INTO raw_capture
+  (id, captured_at, device_id, source, barcode, verbatim, payload,
+   lookup_status, lookup_at, product_id, lot_id, normalised_at) VALUES
+  ('0191a6bf-0001-7000-8000-000000000001','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   '2 and half bags of Jasmine Rice (5 lb) (2.27 kg)',
+   json_object('raw_id',1,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 1, 1,'2026-08-02T18:22:11'),
+  ('0191a6bf-0002-7000-8000-000000000002','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One family size, cookies and creme Cheerios - 425g',
+   json_object('raw_id',2,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 2, 2,'2026-08-02T18:22:31'),
+  ('0191a6bf-0003-7000-8000-000000000003','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'Two Indomie - 5 packs per bag',
+   json_object('raw_id',3,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 3, 3,'2026-08-02T18:22:48'),
+  ('0191a6bf-0004-7000-8000-000000000004','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One bottle Clover honey = 340g - weight',
+   json_object('raw_id',4,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 4, 4,'2026-08-02T18:23:02'),
+  ('0191a6bf-0005-7000-8000-000000000005','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   '10 Essential Everyday Tomato Paste - 340g',
+   json_object('raw_id',5,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 5, 5,'2026-08-02T18:23:20'),
+  -- The worst-case row, captured faithfully and normalised honestly.
+  ('0191a6bf-0006-7000-8000-000000000006','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One Lipton box',
+   json_object('raw_id',6,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 6, 6,'2026-08-02T18:23:41'),
+  ('0191a6bf-0007-7000-8000-000000000007','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One bag of basmati rice',
+   json_object('raw_id',7,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 7, 7,'2026-08-02T18:23:58'),
+  ('0191a6bf-0008-7000-8000-000000000008','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   '1 whey protein bottle (899g)',
+   json_object('raw_id',8,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 8, 8,'2026-08-02T18:24:15'),
+  ('0191a6bf-0009-7000-8000-000000000009','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One box of Crunchy Oats''n honey - 49 pouches per box',
+   json_object('raw_id',9,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 9, 9,'2026-08-02T18:24:33'),
+  ('0191a6bf-000a-7000-8000-00000000000a','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'One double chocolate, Hot Cocoa mix - 435g',
+   json_object('raw_id',10,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 10, 10,'2026-08-02T18:24:51'),
+  ('0191a6bf-000b-7000-8000-00000000000b','2026-08-02T18:20:00','notebook-import','notebook_import',NULL,
+   'Ten chicken wing pieces',
+   json_object('raw_id',11,'captured_on','2026-08-02','source','handwritten notebook'),
+   'not_applicable',NULL, 11, 11,'2026-08-02T18:25:09');
+
+-- ---------------------------------------------------------------------------
 -- Recipes — hand-entered against products that already exist (ADR 006).
 -- Ingredients are foreign keys, never free text.
 -- ---------------------------------------------------------------------------
