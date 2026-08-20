@@ -9,6 +9,7 @@ pantry — a thin slice of the pantry planner
 
 USAGE
   pantry list    [--days N] [--all] [--db PATH]
+  pantry cook    [--why] [--db PATH]
   pantry capture "verbatim text" --name NAME [options]
 
 CAPTURE OPTIONS
@@ -109,6 +110,36 @@ do {
         \(report.lotsTotal) lots — \(report.notApplicable) not applicable, \
         \(report.excludedUnknown) could not be assessed
         """)
+
+    case "cook":
+        let matches = try Matcher(db: db).cookTonight()
+        guard !matches.isEmpty else {
+            print("No recipes recorded yet.")
+            break
+        }
+
+        print("What can I cook tonight?\n")
+        for match in matches {
+            print("  \(match.verdict.rawValue.padded(20))\(match.recipe)")
+            print("  \(String(repeating: " ", count: 20))\(match.decidedBy)")
+
+            // --why shows the working: what each ingredient needed, what is on
+            // hand, and how the comparison was reached.
+            if flags["why"] != nil {
+                for check in match.ingredients {
+                    let have = check.haveQty.map { String(format: "%g", $0) } ?? "unknown"
+                    let need = String(format: "%g", check.needQty)
+                    print("  \(String(repeating: " ", count: 20))"
+                        + "· \(check.ingredient.padded(28))"
+                        + "need \(need) \(check.needUnit), have \(have)"
+                        + "  [\(check.status.rawValue)]")
+                }
+            }
+            print("")
+        }
+
+        let unresolved = matches.reduce(0) { $0 + $1.excluded }
+        print("\(matches.count) recipes — \(unresolved) ingredient(s) could not be assessed")
 
     case "capture":
         guard let name = flags["name"] else {

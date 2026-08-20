@@ -25,5 +25,15 @@ let package = Package(
             name: "pantry",
             dependencies: ["PantryCore"]
         ),
+        // Checks live in an ordinary executable rather than a .testTarget.
+        // On macOS both XCTest and Swift Testing ship inside Xcode, not in
+        // Command Line Tools, so a real test target cannot compile here.
+        // Installing a 30 GB IDE to obtain an assert function is a poor trade;
+        // this runs the same checks and exits non-zero on failure. Converting
+        // it to XCTest once Xcode is installed is mechanical.
+        .executableTarget(
+            name: "pantry-tests",
+            dependencies: ["PantryCore"]
+        ),
     ]
 )

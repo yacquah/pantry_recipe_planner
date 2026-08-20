@@ -87,7 +87,7 @@ Application code next.
 - [x] Weigh the frozen wings — the last missing count/mass bridge
 - [x] Thin vertical slice: capture an item, derive its expiry, list it (`cli/`)
 - [ ] Expiry notifications
-- [ ] Cook-tonight matcher
+- [x] Cook-tonight matcher (`pantry cook`, with checks)
 
 **Phase 2 (committed, not started)**
 

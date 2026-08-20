@@ -20,9 +20,28 @@ pantry list                     # expiring within 3 days, plus exclusions
 pantry list --days 30
 pantry list --all               # every lot, and where its date came from
 
+pantry cook                     # what can I cook tonight
+pantry cook --why               # ...and the working behind each verdict
+
 pantry capture "half a bag of red lentils" --name "Red lentils" \
     --unit g --qty 250 --class ambient_stable --precision estimated
 ```
+
+## Checks
+
+```bash
+swift run pantry-tests
+```
+
+21 checks, no database and no fixtures, because everything they cover is a
+pure function. They exit non-zero on failure.
+
+They are an ordinary executable rather than a `.testTarget`, and that is not a
+preference: on macOS **both XCTest and Swift Testing ship inside Xcode**, not
+in Command Line Tools, so a real test target cannot compile on this machine.
+Installing a 30 GB IDE to obtain an assert function is a poor trade. Once
+Xcode is installed for the iOS app, converting these to XCTest is mechanical —
+each `expect(a, b, label)` becomes an `XCTAssertEqual`.
 
 ## Layout
 
@@ -32,9 +51,27 @@ Sources/PantryCore/     the logic — no printing, no argument parsing
   UUIDv7.swift          client-minted, time-ordered ids (ADR 005)
   Capture.swift         raw_capture -> product -> lot -> ledger, transactional
   Expiry.swift          reads ADR 001's chain out of v_lot_expiry
+  Matcher.swift         ADR 004's verdict rules, as pure functions
 Sources/pantry/
   main.swift            argument parsing and output, nothing else
+Sources/pantry-tests/
+  main.swift            checks, runnable without Xcode
 ```
+
+## Where the logic lives, and why it differs by feature
+
+The **expiry chain is a SQL view**, because three consumers must agree exactly
+— the list, the notification job, and FEFO ordering when cooking. A view is
+the only way to guarantee they cannot drift apart.
+
+The **matcher's verdict rules are Swift**, because they have one consumer and
+encode policy that will keep changing as ADR 004 is refined. As pure functions
+they can be pinned down by checks with no database in the way. SQL fetches
+facts; Swift decides what they mean.
+
+`schema/queries/02_cook_tonight.sql` still exists and implements the same rules
+independently. Running both and comparing is a genuine cross-check — they were
+written separately and agree.
 
 The two-target split is deliberate. When the iOS app arrives it imports
 `PantryCore` unchanged and supplies a different interface; had the logic lived
