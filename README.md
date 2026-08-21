@@ -77,7 +77,7 @@ Design is settled — the spec, nine decision records and the schema are done.
 
 A headless Swift package: `PantryCore` holds the logic, `pantry` is a thin CLI
 over it, and the iOS app imports the same library rather than reimplementing
-any of it. 47 checks pass via `swift run pantry-tests`.
+any of it. 73 checks pass via `swift run pantry-tests`.
 
 | Capability | Where it lives |
 |---|---|
@@ -87,22 +87,20 @@ any of it. 47 checks pass via `swift run pantry-tests`.
 | Append-only ledger — cook, waste, eat, recount (ADR 003) | `pantry cook`, `waste`, `eat`, `recount` |
 | Checkpoint rule: a recount supersedes rather than sums (ADR 005) | `v_lot_balance` |
 | Numbered device migrations, carried inside the library (ADR 009) | `pantry migrate` |
+| Which lots may interrupt you, when, and in what words (ADR 001, spec §5) | `pantry alerts` |
 
 ### The app (`Pantry/`) — one screen
 
 SwiftUI, iOS 17+, a single SQLite database in Application Support. It shows
 what is expiring and everything on hand, each date labelled with where it came
 from, and offers a one-tap import of the real 11-item inventory into an empty
-install. **It is read-only today** — everything the ledger can do is reachable
-from the CLI and not yet from the phone.
+install. **Expiry reminders work** — the phone schedules them, defers the
+permission prompt until there is something real to ask about, and reports what
+iOS confirms it is holding rather than what was planned. Everything else the
+ledger can do is still reachable only from the CLI.
 
 ### What v1 still needs
 
-- [ ] **Expiry notifications.** The judgement is already made: ADR 001's rule
-      that only `use_by` dates and perishables may interrupt anyone lives in
-      `ExpiryItem.shouldPush`, and the list badges those rows today. Missing is
-      the iOS scheduling and spec §5's lead time —
-      `min(3 days, 30% of applicable shelf life)`.
 - [ ] **Writing from the app.** Capture, cook, waste and recount have no UI.
       Until they do the app cannot be used in a kitchen — and daily use is the
       trigger ADR 008 set for starting phase 2.
@@ -145,13 +143,14 @@ sequence is that nothing was coded until the ambiguity was gone.
 | Numbered migrations | The device database can now change safely after release |
 | The write path and the checkpoint rule | ADR 005 implemented rather than only described; checks 33 → 47 |
 
-**Client — 20 August**
+**Client — 20–21 August**
 
 | Milestone | What it settled |
 |---|---|
 | Declared iOS support on the package | So the app links `PantryCore` instead of forking the logic |
 | Moved the starter inventory into the library | A sandboxed app cannot read the repository it was built from |
 | iOS app and its expiring list | Verified on a clean simulator install, tap-driven |
+| Expiry reminders, end to end | The headline v1 feature. Lead time varies by shelf life; four separate reasons to stay silent; checks 47 → 73 |
 
 ## What the seed data already taught me
 
