@@ -70,32 +70,88 @@ edited, `normalized` is derived from it.
 
 ## Status
 
-Week 3 — design complete, schema built and proven against real data.
-Application code next.
+Design is settled — the spec, nine decision records and the schema are done.
+**The engine is complete; the iOS app has its first screen.**
 
-**Design (done)**
+### The engine (`core/`) — done
 
-- [x] Real pantry inventoried by hand (11 items, `data/seed/`)
-- [x] `docs/spec.md` completed — all seven questions answered
-- [x] Eight decision records, each with its rejected options
-- [x] Schema drafted in two dialects and seeded with the real pantry
-- [x] Two target queries answerable in raw SQL
+A headless Swift package: `PantryCore` holds the logic, `pantry` is a thin CLI
+over it, and the iOS app imports the same library rather than reimplementing
+any of it. 47 checks pass via `swift run pantry-tests`.
 
-**v1 build (next)**
+| Capability | Where it lives |
+|---|---|
+| Capture and the raw, never-edited layer (ADR 002) | `pantry capture` |
+| Expiry chain, every date carrying its provenance (ADR 001) | `pantry list [--all] [--days N]` |
+| Cook-tonight matcher, four-state answers (ADR 004) | `pantry cook --why` |
+| Append-only ledger — cook, waste, eat, recount (ADR 003) | `pantry cook`, `waste`, `eat`, `recount` |
+| Checkpoint rule: a recount supersedes rather than sums (ADR 005) | `v_lot_balance` |
+| Numbered device migrations, carried inside the library (ADR 009) | `pantry migrate` |
 
-- [x] `raw_capture` table added to the device schema (ADR 008)
-- [x] Weigh the frozen wings — the last missing count/mass bridge
-- [x] Thin vertical slice: capture an item, derive its expiry, list it (`core/`)
-- [ ] Expiry notifications
-- [x] Cook-tonight matcher (`pantry cook`, with checks)
-- [x] Numbered schema migrations, so the device database can change safely
-- [x] The write path — `cook`, `waste`, `eat`, `recount` — and ADR 005's
-      checkpoint rule finally implemented rather than only described
+### The app (`Pantry/`) — one screen
+
+SwiftUI, iOS 17+, a single SQLite database in Application Support. It shows
+what is expiring and everything on hand, each date labelled with where it came
+from, and offers a one-tap import of the real 11-item inventory into an empty
+install. **It is read-only today** — everything the ledger can do is reachable
+from the CLI and not yet from the phone.
+
+### What v1 still needs
+
+- [ ] **Expiry notifications.** The judgement is already made: ADR 001's rule
+      that only `use_by` dates and perishables may interrupt anyone lives in
+      `ExpiryItem.shouldPush`, and the list badges those rows today. Missing is
+      the iOS scheduling and spec §5's lead time —
+      `min(3 days, 30% of applicable shelf life)`.
+- [ ] **Writing from the app.** Capture, cook, waste and recount have no UI.
+      Until they do the app cannot be used in a kitchen — and daily use is the
+      trigger ADR 008 set for starting phase 2.
+- [ ] **Barcode capture.** Spec §2 makes v1 barcode-first. The schema is ready
+      (`product_barcode`, `raw_capture.barcode`, and a `lookup_status` that
+      resolves on reconnect); the scanner and the lookup are not written.
+
+Offline-first needs no work — it falls out of keeping one SQLite file on the
+device (ADR 008).
 
 **Phase 2 (committed, not started)**
 
 - [ ] Backend API, raw layer, normalisation service, canonical store —
       triggered by v1 being in daily use (ADR 008)
+
+## Build log
+
+Three phases: two weeks of design before any application code, then the engine,
+then the client. Each entry says what it settled, because the point of the
+sequence is that nothing was coded until the ambiguity was gone.
+
+**Design — 10–16 August**
+
+| Milestone | What it settled |
+|---|---|
+| Inventoried the real pantry by hand | 11 items, `data/seed/` — the dataset everything else is tested against |
+| Answered the spec's seven questions | Including the two that turned into ADRs 001 and 004 |
+| Wrote nine decision records | Each with its rejected options, so reversals stay cheap |
+| Drafted the schema in two dialects | Canonical MySQL and device SQLite, seeded with the real 11 items |
+| Proved both target queries in raw SQL | Expiry and cook-tonight answerable before a line of Swift |
+
+**Engine — 20 August**
+
+| Milestone | What it settled |
+|---|---|
+| `raw_capture` layer added to the device schema | Untrusted data lands raw and is never edited (ADR 008) |
+| Weighed the frozen wings | Closed the last missing count/mass bridge |
+| Thin vertical slice in Swift | Capture an item, derive its expiry, list it |
+| Cook-tonight matcher, plus the check suite | Four-state answers that never overstate confidence |
+| Numbered migrations | The device database can now change safely after release |
+| The write path and the checkpoint rule | ADR 005 implemented rather than only described; checks 33 → 47 |
+
+**Client — 20 August**
+
+| Milestone | What it settled |
+|---|---|
+| Declared iOS support on the package | So the app links `PantryCore` instead of forking the logic |
+| Moved the starter inventory into the library | A sandboxed app cannot read the repository it was built from |
+| iOS app and its expiring list | Verified on a clean simulator install, tap-driven |
 
 ## What the seed data already taught me
 
@@ -116,8 +172,10 @@ data/seed/       Hand-collected starting inventory
 docs/spec.md     What v1 does, and explicitly what it does not
 docs/schema.md   The logical model, and why it is shaped that way
 docs/decisions/  One record per significant choice, including rejected options
-schema/          Canonical MySQL DDL, seed data, target queries, build.sh
+schema/          Canonical MySQL DDL, target queries, build.sh
 core/            Swift package — PantryCore plus a headless CLI. The device
-                 schema lives here as numbered migrations, because the app
-                 has to carry them.
+                 schema lives here as numbered migrations, and the starter
+                 inventory beside them, because the app has to carry both.
+Pantry/          The iOS app. SwiftUI over PantryCore as a local package
+                 dependency — no logic of its own.
 ```
