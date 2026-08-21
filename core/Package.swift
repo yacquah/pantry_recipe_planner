@@ -13,7 +13,12 @@ import PackageDescription
 
 let package = Package(
     name: "pantry",
-    platforms: [.macOS(.v13)],
+    // iOS is declared because the app imports PantryCore (ADR 008). Without
+    // it, SPM treats this as a macOS-only package and an iOS target cannot
+    // depend on it. The floor is deliberately low: the library uses only
+    // Foundation and SQLite3, so nothing here needs a recent OS — the app
+    // target sets its own, higher, minimum for SwiftUI.
+    platforms: [.macOS(.v13), .iOS(.v17)],
     targets: [
         .target(
             name: "PantryCore",
