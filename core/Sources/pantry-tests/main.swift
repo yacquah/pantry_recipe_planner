@@ -145,6 +145,74 @@ suite("UUIDv7 — ADR 005") {
     expectTrue(earlier < later, "ids sort by creation time")
 }
 
+// These are the only checks that touch a database. Everything above is a pure
+// function; migrations are not, because the whole point is what they do to a
+// file that already exists. Each run uses a throwaway path and deletes it.
+suite("Migrations — schema versioning") {
+    let path = NSTemporaryDirectory() + "pantry-check-\(UUID().uuidString).db"
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    do {
+        let latest = try Migrations.latestVersion()
+        expectTrue(latest >= 1, "at least one migration ships with the app")
+
+        if latest >= 1 {
+            // Numbered from 1, ascending, no duplicates and no gaps. A gap
+            // would mean a migration was written and never committed.
+            expect(try Migrations.all().map(\.version), Array(1...latest),
+                   "versions run 1...\(latest) with no gaps or duplicates")
+        }
+
+        let db = try Database(path: path)
+        expect(try db.schemaVersion, 0, "a brand new database reads version 0")
+
+        let applied = try db.migrate()
+        expect(applied.count, latest, "a fresh database applies every migration")
+        expect(try db.schemaVersion, latest, "and ends at the latest version")
+
+        // The property the whole mechanism rests on: running it again does
+        // nothing. Without this, every app launch would re-run every migration.
+        expect(try db.migrate().count, 0, "migrating an up-to-date database is a no-op")
+        expect(try db.schemaVersion, latest, "and leaves the version untouched")
+
+        // Prove the schema is real, not just the version number.
+        expect(try db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='pantry_event'"
+        ).count, 1, "the ledger table exists afterwards")
+
+        // The bug that made executeScript necessary, pinned so it cannot come
+        // back. run() goes through sqlite3_prepare_v2, which compiles only the
+        // FIRST statement and silently discards the rest — a migration run
+        // through it would create one table and report success.
+        func tableExists(_ name: String) throws -> Int {
+            Int(try db.query(
+                "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name = ?",
+                [.text(name)]
+            ).first?.int("n") ?? 0)
+        }
+
+        try db.run("CREATE TABLE probe_a(x); CREATE TABLE probe_b(x);")
+        expect(try tableExists("probe_a"), 1, "run() executes the first statement")
+        expect(try tableExists("probe_b"), 0,
+               "run() silently ignores the rest — the exact bug executeScript fixes")
+
+        try db.executeScript("CREATE TABLE probe_c(x); CREATE TABLE probe_d(x);")
+        expect(try tableExists("probe_c") + tableExists("probe_d"), 2,
+               "executeScript runs every statement in the script")
+
+        // A database written by a NEWER build must be refused rather than
+        // guessed at — this build cannot know what that version changed.
+        try db.executeScript("PRAGMA user_version = 9999")
+        var refused = false
+        do { _ = try db.migrate() } catch { refused = true }
+        expectTrue(refused, "a database newer than the app is refused, not opened")
+
+    } catch {
+        checksRun += 1
+        failures.append("Migrations suite threw unexpectedly: \(error)")
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 print("\n" + String(repeating: "-", count: 60))

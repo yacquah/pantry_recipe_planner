@@ -8,6 +8,7 @@ let usage = """
 pantry — a thin slice of the pantry planner
 
 USAGE
+  pantry migrate [--db PATH]      create or upgrade the database
   pantry list    [--days N] [--all] [--db PATH]
   pantry cook    [--why] [--db PATH]
   pantry capture "verbatim text" --name NAME [options]
@@ -70,7 +71,34 @@ let databasePath = flags["db"] ?? "/tmp/pantry.db"
 do {
     let db = try Database(path: databasePath)
 
+    // Every command except `migrate` refuses to touch a database whose shape
+    // it does not recognise. Reading an out-of-date schema tends to produce
+    // wrong answers rather than errors, which is the worse failure.
+    if command != "migrate" {
+        let current = try db.schemaVersion
+        let latest = try Migrations.latestVersion()
+        if current < latest {
+            fail("""
+                database is at schema version \(current); this build expects \(latest).
+                       run:  pantry migrate --db \(databasePath)
+                """)
+        }
+    }
+
     switch command {
+
+    case "migrate":
+        let before = try db.schemaVersion
+        let applied = try db.migrate()
+        if applied.isEmpty {
+            print("already at schema version \(before) — nothing to do")
+        } else {
+            print("migrating \(databasePath)")
+            for migration in applied {
+                print("  applied \(String(format: "%03d", migration.version))  \(migration.name)")
+            }
+            print("now at schema version \(try db.schemaVersion)")
+        }
 
     case "list":
         let expiry = Expiry(db: db)

@@ -17,6 +17,10 @@ let package = Package(
     targets: [
         .target(
             name: "PantryCore",
+            // The migrations ship INSIDE the library rather than beside it. An
+            // app on a phone has to carry the instructions for upgrading its
+            // own database; a .sql file sitting in the repo is no use to it.
+            resources: [.copy("Migrations")],
             // SQLite ships with macOS, so this is the only dependency and it
             // is already on the machine. No package resolution, no network.
             linkerSettings: [.linkedLibrary("sqlite3")]

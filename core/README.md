@@ -16,6 +16,8 @@ The database is the one `schema/build.sh` produces, at `/tmp/pantry.db` by
 default. Point elsewhere with `--db PATH`.
 
 ```bash
+pantry migrate                  # create the database, or upgrade an existing one
+
 pantry list                     # expiring within 3 days, plus exclusions
 pantry list --days 30
 pantry list --all               # every lot, and where its date came from
@@ -48,6 +50,8 @@ each `expect(a, b, label)` becomes an `XCTAssertEqual`.
 ```
 Sources/PantryCore/     the logic — no printing, no argument parsing
   Database.swift        thin wrapper over the C SQLite API
+  Migrations.swift      numbered schema history, applied on demand
+  Migrations/           the .sql steps themselves, shipped in the bundle
   UUIDv7.swift          client-minted, time-ordered ids (ADR 005)
   Capture.swift         raw_capture -> product -> lot -> ledger, transactional
   Expiry.swift          reads ADR 001's chain out of v_lot_expiry
@@ -57,6 +61,35 @@ Sources/pantry/
 Sources/pantry-tests/
   main.swift            checks, runnable without Xcode
 ```
+
+## Migrations
+
+The database records its own schema version in SQLite's built-in
+`PRAGMA user_version`. `migrate()` applies only the numbered steps above that
+version, so a fresh install runs all of them, a partially upgraded one runs
+the remainder, and an up-to-date one runs nothing.
+
+It is the ledger idea from ADR 003 applied to the schema itself: the shape is
+never overwritten, changes are appended, and the current shape is whatever
+replaying them in order produces.
+
+Three properties the checks pin down:
+
+- **Each step and its version bump share one transaction.** A migration that
+  fails halfway rolls back entirely, rather than leaving a half-changed
+  database claiming to be a version it is not.
+- **Re-running is a no-op**, which is what lets the app migrate on every
+  launch without thinking about it.
+- **A database newer than the build is refused**, not opened. This build
+  cannot know what a later version changed, and guessing corrupts data.
+
+Every command except `migrate` refuses to run against an out-of-date schema.
+Reading an old shape tends to produce wrong answers rather than errors, and a
+wrong answer is the worse failure.
+
+`schema/build.sh` applies migrations through this same code rather than piping
+SQL in, so the development database and the one on a phone are built by an
+identical path.
 
 ## Where the logic lives, and why it differs by feature
 

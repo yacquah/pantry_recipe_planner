@@ -21,8 +21,12 @@ rm -f "$DB"        # -f: no complaint if it does not exist yet.
                    # Starting clean is what makes the build reproducible —
                    # otherwise CREATE TABLE hits "table already exists".
 
-sqlite3 "$DB" < "$HERE/001_device_sqlite.sql"
-echo "schema loaded"
+# The schema is applied by the app's own migration code, not by piping a .sql
+# file in. That is deliberate: the development database and the one on a phone
+# are then created by exactly the same path, so a migration that is broken is
+# broken here too, where it is cheap to find out.
+swift build --package-path "$HERE/../core" >/dev/null
+"$HERE/../core/.build/debug/pantry" migrate --db "$DB"
 
 sqlite3 "$DB" < "$HERE/002_seed.sql"
 echo "seed loaded  ->  $DB"

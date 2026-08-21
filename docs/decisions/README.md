@@ -24,6 +24,7 @@ the **rejected options**: three months from now the useful question is never
 | 006 | [What v1 does not build](006-v1-scope-boundary.md) | Accepted |
 | 007 | [What a lot is, and when one splits](007-lot-granularity.md) | Accepted |
 | 008 | [v1 ships without a server; the backend is phase 2](008-no-server-in-v1.md) | Accepted |
+| 009 | [The schema changes by numbered migration, never by rebuild](009-schema-migrations.md) | Accepted |
 
 ## Candidates queued
 

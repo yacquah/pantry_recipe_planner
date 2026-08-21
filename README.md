@@ -113,6 +113,8 @@ data/seed/       Hand-collected starting inventory
 docs/spec.md     What v1 does, and explicitly what it does not
 docs/schema.md   The logical model, and why it is shaped that way
 docs/decisions/  One record per significant choice, including rejected options
-schema/          DDL, seed, target queries, and build.sh
-core/            Swift package — PantryCore library plus a headless CLI
+schema/          Canonical MySQL DDL, seed data, target queries, build.sh
+core/            Swift package — PantryCore plus a headless CLI. The device
+                 schema lives here as numbered migrations, because the app
+                 has to carry them.
 ```

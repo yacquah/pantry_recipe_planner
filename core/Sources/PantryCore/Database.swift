@@ -113,6 +113,25 @@ public final class Database {
         return sqlite3_last_insert_rowid(handle)
     }
 
+    /// Runs a script containing MANY statements.
+    ///
+    /// `run` and `query` go through sqlite3_prepare_v2, which compiles only the
+    /// FIRST statement in the string and silently ignores whatever follows. For
+    /// a migration file that would mean creating one table and quietly skipping
+    /// the rest — a failure that looks like success. sqlite3_exec is the tool
+    /// for scripts; it loops over every statement.
+    ///
+    /// No parameter binding, so never hand this a string built from user input.
+    public func executeScript(_ sql: String) throws {
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let code = sqlite3_exec(handle, sql, nil, nil, &errorMessage)
+        guard code == SQLITE_OK else {
+            let message = errorMessage.map { String(cString: $0) } ?? lastError()
+            sqlite3_free(errorMessage)          // sqlite3_exec allocates this
+            throw Failure.sql(message: message, statement: "<script>")
+        }
+    }
+
     public func query(_ sql: String, _ binds: [SQLValue] = []) throws -> [Row] {
         let statement = try prepare(sql, binds)
         defer { sqlite3_finalize(statement) }
