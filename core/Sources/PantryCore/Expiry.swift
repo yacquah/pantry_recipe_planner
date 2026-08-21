@@ -1,6 +1,10 @@
 import Foundation
 
 public struct ExpiryItem: Sendable {
+    /// Identity is the lot, not the product. Two bags of the same rice bought
+    /// a month apart are two rows with two different deadlines (ADR 007), and
+    /// anything keyed by name collapses them into one.
+    public let lotId: Int
     public let item: String
     public let effectiveDate: String
     public let isMonthPrecision: Bool
@@ -8,6 +12,30 @@ public struct ExpiryItem: Sendable {
     public let kind: String?         // use_by | best_before | sell_by
     public let daysLeft: Int
     public let shelfLifeClass: String?
+    /// The shelf life applicable to this lot in its current state, in days.
+    /// NULL where none is recorded — see 004. Only used to size the warning.
+    public let shelfLifeDays: Int?
+
+    /// Public so the checks can build one without a database. A struct's
+    /// memberwise initialiser is internal however public its properties are,
+    /// and the alerting rules are worth checking against hand-built rows —
+    /// most of the cases that matter (a use-by date, an unknown, a month-only
+    /// date) do not exist in the eleven-item seed at all.
+    public init(
+        lotId: Int, item: String, effectiveDate: String, isMonthPrecision: Bool,
+        source: String, kind: String?, daysLeft: Int,
+        shelfLifeClass: String?, shelfLifeDays: Int?
+    ) {
+        self.lotId = lotId
+        self.item = item
+        self.effectiveDate = effectiveDate
+        self.isMonthPrecision = isMonthPrecision
+        self.source = source
+        self.kind = kind
+        self.daysLeft = daysLeft
+        self.shelfLifeClass = shelfLifeClass
+        self.shelfLifeDays = shelfLifeDays
+    }
 
     /// ADR 001: a best-before is a quality date and is never reported as
     /// "expired". Saying so makes people bin good food, which would turn an
@@ -55,8 +83,8 @@ public struct Expiry {
     /// reimplementing it slightly differently.
     public func upcoming(withinDays days: Int) throws -> ExpiryReport {
         let rows = try db.query("""
-            SELECT canonical_name, effective_date, expires_on_precision,
-                   expiry_source, expiry_kind, shelf_life_class,
+            SELECT lot_id, canonical_name, effective_date, expires_on_precision,
+                   expiry_source, expiry_kind, shelf_life_class, shelf_life_days,
                    CAST(julianday(effective_date) - julianday(date('now')) AS INTEGER) AS days_left
               FROM v_lot_expiry
              WHERE effective_date IS NOT NULL
@@ -71,13 +99,15 @@ public struct Expiry {
                   let date = row.string("effective_date"),
                   let source = row.string("expiry_source") else { return nil }
             return ExpiryItem(
+                lotId: Int(row.int("lot_id") ?? 0),
                 item: name,
                 effectiveDate: date,
                 isMonthPrecision: row.string("expires_on_precision") == "month",
                 source: source,
                 kind: row.string("expiry_kind"),
                 daysLeft: Int(row.int("days_left") ?? 0),
-                shelfLifeClass: row.string("shelf_life_class")
+                shelfLifeClass: row.string("shelf_life_class"),
+                shelfLifeDays: row.int("shelf_life_days").map(Int.init)
             )
         }
 
@@ -99,8 +129,8 @@ public struct Expiry {
     /// Everything the app knows about expiry, for inspection.
     public func all() throws -> [ExpiryItem] {
         let rows = try db.query("""
-            SELECT canonical_name, effective_date, expires_on_precision,
-                   expiry_source, expiry_kind, shelf_life_class,
+            SELECT lot_id, canonical_name, effective_date, expires_on_precision,
+                   expiry_source, expiry_kind, shelf_life_class, shelf_life_days,
                    CAST(COALESCE(julianday(effective_date) - julianday(date('now')), 0) AS INTEGER) AS days_left
               FROM v_lot_expiry
              ORDER BY effective_date IS NULL, effective_date
@@ -110,13 +140,15 @@ public struct Expiry {
             guard let name = row.string("canonical_name"),
                   let source = row.string("expiry_source") else { return nil }
             return ExpiryItem(
+                lotId: Int(row.int("lot_id") ?? 0),
                 item: name,
                 effectiveDate: row.string("effective_date") ?? "",
                 isMonthPrecision: row.string("expires_on_precision") == "month",
                 source: source,
                 kind: row.string("expiry_kind"),
                 daysLeft: Int(row.int("days_left") ?? 0),
-                shelfLifeClass: row.string("shelf_life_class")
+                shelfLifeClass: row.string("shelf_life_class"),
+                shelfLifeDays: row.int("shelf_life_days").map(Int.init)
             )
         }
     }

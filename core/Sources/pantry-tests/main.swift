@@ -319,6 +319,129 @@ suite("Checkpoint balance — ADR 005") {
 
 // ---------------------------------------------------------------------------
 
+suite("Notification lead time — spec §5") {
+
+    // min(3 days, 30% of applicable shelf life). The ceiling is what applies
+    // to nearly everything; the proportional term only bites on food that does
+    // not last long enough for three days' warning to mean anything.
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 730), 3, "two years sealed — the ceiling applies")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 270), 3, "frozen wings, 270 days — still the ceiling")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 10),  3, "ten days — 30% is 3, exactly the ceiling")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 7),   2, "a week opened — 30% shortens it to 2")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 3),   1, "three days — one day's warning, not three")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 2),   1, "two days — never rounds down to no warning at all")
+
+    // Rule 3: a missing shelf life is not a short one. With no basis to
+    // shorten the warning, the ceiling stands.
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: nil), 3, "unknown shelf life falls back to the ceiling")
+    expect(ExpiryAlerts.leadTimeDays(shelfLifeDays: 0),   3, "a zero shelf life is treated as no data, not as expired")
+}
+
+suite("Who may interrupt anybody — ADR 001") {
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 21, hour: 12))!
+
+    func item(
+        _ name: String, _ date: String, source: String = "label", kind: String? = nil,
+        cls: String? = nil, shelf: Int? = nil, monthOnly: Bool = false, lot: Int = 1
+    ) -> ExpiryItem {
+        ExpiryItem(
+            lotId: lot, item: name, effectiveDate: date, isMonthPrecision: monthOnly,
+            source: source, kind: kind, daysLeft: 0, shelfLifeClass: cls, shelfLifeDays: shelf
+        )
+    }
+
+    func plan(_ items: [ExpiryItem]) -> [ExpiryAlert] {
+        ExpiryAlerts.plan(for: items, now: now, calendar: calendar)
+    }
+
+    // The two things that may interrupt someone, and nothing else.
+    expect(plan([item("Wings", "2026-09-01", source: "derived_frozen", cls: "perishable", shelf: 270)]).count,
+           1, "a perishable schedules")
+    expect(plan([item("Fish", "2026-09-01", kind: "use_by", cls: "stable_until_opened", shelf: 730)]).count,
+           1, "a use-by date schedules whatever its class")
+    expect(plan([item("Cheerios", "2026-09-01", kind: "best_before", cls: "stable_until_opened", shelf: 730)]).count,
+           0, "a best-before is a quality date and never interrupts")
+    expect(plan([item("Rice", "2026-09-01", source: "not_applicable", cls: "ambient_stable")]).count,
+           0, "food that does not expire never interrupts")
+
+    // UNKNOWN becomes a resolution task, not a push. An alert nobody can act
+    // on trains people to dismiss this app reflexively.
+    expect(plan([item("Lipton box", "2026-09-01", source: "unknown", cls: "perishable", shelf: 3)]).count,
+           0, "an unknown never notifies")
+
+    // A month-only date is a real month and an invented day.
+    expect(plan([item("Basmati", "2026-09-01", cls: "perishable", shelf: 30, monthOnly: true)]).count,
+           0, "a month-precision date is too vague to interrupt anyone")
+
+    // Already gone. The list still shows it; a push cannot be acted on.
+    expect(plan([item("Old wings", "2026-08-01", source: "derived_frozen", cls: "perishable", shelf: 270)]).count,
+           0, "a date already past does not notify")
+}
+
+suite("When the alert lands, and what it says") {
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 21, hour: 12))!
+
+    let wings = ExpiryItem(
+        lotId: 11, item: "Chicken wing pieces", effectiveDate: "2026-09-10",
+        isMonthPrecision: false, source: "derived_frozen", kind: nil, daysLeft: 20,
+        shelfLifeClass: "perishable", shelfLifeDays: 270
+    )
+    let planned = ExpiryAlerts.plan(for: [wings], now: now, calendar: calendar)
+
+    expect(planned.count, 1, "the wings are scheduled")
+    if let alert = planned.first {
+        let parts = calendar.dateComponents([.year, .month, .day, .hour], from: alert.fireAt)
+        expect(parts.day, 7, "fires three days before the 10th")
+        expect(parts.month, 9, "in the right month")
+        expect(parts.hour, 9, "in the morning, when a kitchen can act on it")
+
+        // Counted from the morning it arrives, not from the day it was planned.
+        expect(alert.body, "In 3 days · estimated — no date recorded",
+               "reads correctly on the day it lands, not on the day it was scheduled")
+        expect(alert.identifier, "expiry.lot.11", "keyed by lot, so rescheduling replaces rather than duplicates")
+    }
+
+    // A use-by must never be softened, and a best-before must never say expired.
+    let useBy = ExpiryItem(
+        lotId: 2, item: "Fresh fish", effectiveDate: "2026-08-24", isMonthPrecision: false,
+        source: "label", kind: "use_by", daysLeft: 3, shelfLifeClass: "perishable", shelfLifeDays: 3
+    )
+    if let alert = ExpiryAlerts.plan(for: [useBy], now: now, calendar: calendar).first {
+        expect(alert.leadDays, 1, "a three-day shelf life gets one day's warning")
+        expectTrue(alert.body.contains("USE BY"), "a safety date says so plainly")
+    } else {
+        expectTrue(false, "the use-by fish should have been scheduled")
+    }
+
+    // Two lots of the same product are two alerts, not one.
+    let bagOne = ExpiryItem(lotId: 21, item: "Basmati rice", effectiveDate: "2026-09-05",
+                            isMonthPrecision: false, source: "derived_frozen", kind: nil, daysLeft: 15,
+                            shelfLifeClass: "perishable", shelfLifeDays: 270)
+    let bagTwo = ExpiryItem(lotId: 22, item: "Basmati rice", effectiveDate: "2026-10-05",
+                            isMonthPrecision: false, source: "derived_frozen", kind: nil, daysLeft: 45,
+                            shelfLifeClass: "perishable", shelfLifeDays: 270)
+    let both = ExpiryAlerts.plan(for: [bagTwo, bagOne], now: now, calendar: calendar)
+    expect(both.count, 2, "two lots of one product are two deadlines (ADR 007)")
+    expect(both.map(\.identifier), ["expiry.lot.21", "expiry.lot.22"], "soonest first, and distinctly identified")
+
+    // iOS keeps 64 pending and drops the rest, so the cap is chosen here.
+    let many = (1...80).map { n in
+        ExpiryItem(lotId: n, item: "Lot \(n)", effectiveDate: "2027-01-01", isMonthPrecision: false,
+                   source: "derived_frozen", kind: nil, daysLeft: 100,
+                   shelfLifeClass: "perishable", shelfLifeDays: 270)
+    }
+    expect(ExpiryAlerts.plan(for: many, now: now, calendar: calendar).count, 64,
+           "capped at what iOS will actually hold")
+}
+
+// ---------------------------------------------------------------------------
+
 print("\n" + String(repeating: "-", count: 60))
 if failures.isEmpty {
     print("\(checksRun) checks passed")

@@ -173,6 +173,35 @@ do {
         let written = try consumption.execute(plan, force: flags["force"] != nil)
         print("\n\(written.count) COOK event(s) written")
 
+    // What the phone should have pending. The phone is the only thing that can
+    // actually post a notification, but the decision about which ones exist is
+    // a rule, and rules are inspectable from here like every other one.
+    case "alerts":
+        let plan = ExpiryAlerts.plan(for: try Expiry(db: db).all())
+
+        if plan.isEmpty {
+            print("Nothing to notify about.")
+        } else {
+            print("\(plan.count) alert(s) would be pending\n")
+            print("FIRES              LEAD   ITEM                             SAYS")
+            print(String(repeating: "-", count: 96))
+            let stamp = DateFormatter()
+            stamp.dateFormat = "yyyy-MM-dd HH:mm"
+            for alert in plan {
+                print(stamp.string(from: alert.fireAt).padded(19)
+                    + "\(alert.leadDays)d".padded(7)
+                    + alert.item.padded(33)
+                    + alert.body)
+            }
+        }
+
+        // Rule 4 again: say what was considered and passed over, or the empty
+        // case reads as "nothing expires" rather than "nothing may interrupt".
+        let considered = try Expiry(db: db).all()
+        let silent = considered.filter { !$0.shouldPush }.count
+        print("\n\(considered.count) lots — \(silent) may never notify (ADR 001), "
+            + "\(considered.count - silent - plan.count) eligible but not due")
+
     case "seed":
         try StarterData.load(into: db, force: flags["force"] != nil)
         let count = try db.query("SELECT COUNT(*) AS n FROM product").first?.int("n") ?? 0
