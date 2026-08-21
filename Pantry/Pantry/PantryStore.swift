@@ -14,6 +14,16 @@ final class PantryStore {
 
     private(set) var items: [ExpiryItem] = []
     private(set) var expiringSoon: ExpiryReport?
+    /// What iOS should have pending. Kept here so the screen can say what the
+    /// app will actually do, rather than implying it from a bell icon.
+    private(set) var alerts: [ExpiryAlert] = []
+
+    /// What iOS confirms it is actually holding, which is not the same claim.
+    /// Scheduling can be refused — permission withheld, the 64-request limit,
+    /// a trigger already in the past — and a screen that reports the plan
+    /// instead of the fact would promise reminders nobody is going to get.
+    private(set) var scheduledCount = 0
+    private(set) var notificationsRefused = false
     private(set) var errorMessage: String?
     private(set) var hasLoaded = false
 
@@ -57,8 +67,50 @@ final class PantryStore {
         let expiry = Expiry(db: database)
         items = try expiry.all()
         expiringSoon = try expiry.upcoming(withinDays: 3)
+        alerts = ExpiryAlerts.plan(for: items)
         errorMessage = nil
         hasLoaded = true
+
+        // Re-synced after every read, because every read follows a change.
+        // The plan is the whole intended state, so this both schedules new
+        // alerts and retires ones whose lot has been cooked or thrown out.
+        Task { await syncNotifications() }
+    }
+
+    /// Brings iOS's pending notifications in line with the plan, asking for
+    /// permission first if there is now something worth asking about.
+    ///
+    /// The prompt is deliberately deferred to here rather than fired at
+    /// launch: iOS only ever asks once, and a refusal collected before the app
+    /// has shown what it is for is a refusal that cannot be revisited.
+    private func syncNotifications() async {
+        guard !alerts.isEmpty else {
+            await ExpiryNotifications.sync([])
+            scheduledCount = 0
+            return
+        }
+
+        switch await ExpiryNotifications.permission() {
+        case .notAskedYet:
+            guard await ExpiryNotifications.requestPermission() else {
+                notificationsRefused = true
+                scheduledCount = 0
+                return
+            }
+        case .denied:
+            notificationsRefused = true
+            scheduledCount = 0
+            return
+        case .granted:
+            break
+        }
+
+        notificationsRefused = false
+        await ExpiryNotifications.sync(alerts)
+
+        // Read back rather than assume. This is the only number the screen is
+        // entitled to call "scheduled".
+        scheduledCount = await ExpiryNotifications.pending().count
     }
 
     /// Imports the hand-collected eleven-item pantry. Refuses if anything is

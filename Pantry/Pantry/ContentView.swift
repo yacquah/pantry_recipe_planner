@@ -34,7 +34,7 @@ private struct PantryList: View {
                         Text("Nothing expiring in the next 3 days.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(soon.items, id: \.item) { item in
+                        ForEach(soon.items, id: \.lotId) { item in
                             ExpiryRow(item: item)
                         }
                     }
@@ -49,8 +49,34 @@ private struct PantryList: View {
                 }
             }
 
+            if let next = store.alerts.first {
+                Section {
+                    LabeledContent {
+                        Text(next.fireAt, format: .dateTime.day().month().year())
+                            .monospacedDigit()
+                    } label: {
+                        Text(next.item)
+                        Text("\(next.leadDays) day(s) before it needs using")
+                    }
+                } header: {
+                    Text("Next reminder")
+                } footer: {
+                    // The bell on a row promises a notification. This reports
+                    // what iOS confirmed it holds — not what was planned — so
+                    // a refused permission cannot look like a working reminder.
+                    if store.notificationsRefused {
+                        Text("Notifications are off, so nothing will be sent. "
+                             + "Turn them on in Settings to be reminded.")
+                    } else {
+                        Text(store.scheduledCount == 1
+                             ? "1 reminder scheduled."
+                             : "\(store.scheduledCount) reminders scheduled.")
+                    }
+                }
+            }
+
             Section("Everything") {
-                ForEach(store.items, id: \.item) { item in
+                ForEach(store.items, id: \.lotId) { item in
                     ExpiryRow(item: item)
                 }
             }
