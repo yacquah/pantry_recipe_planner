@@ -22,6 +22,18 @@ Thumbs.db
 .swiftpm/
 Package.resolved
 
+# Xcode per-user state: window positions, which files were open, scroll
+# offsets, breakpoints. Changes on every click and belongs to one person, so
+# committing it means permanent diff noise and guaranteed conflicts.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode build output — regenerated, and large.
+DerivedData/
+build/
+
 # Spreadsheet lock files
 ~$*.xlsx
 .~lock.*#
