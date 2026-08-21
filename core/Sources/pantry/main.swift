@@ -173,6 +173,11 @@ do {
         let written = try consumption.execute(plan, force: flags["force"] != nil)
         print("\n\(written.count) COOK event(s) written")
 
+    case "seed":
+        try StarterData.load(into: db, force: flags["force"] != nil)
+        let count = try db.query("SELECT COUNT(*) AS n FROM product").first?.int("n") ?? 0
+        print("starter inventory imported — \(count) products")
+
     case "waste":
         guard let lot = flags["lot"].flatMap(Int64.init),
               let qty = flags["qty"].flatMap(Double.init),

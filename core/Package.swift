@@ -19,13 +19,24 @@ let package = Package(
     // Foundation and SQLite3, so nothing here needs a recent OS — the app
     // target sets its own, higher, minimum for SwiftUI.
     platforms: [.macOS(.v13), .iOS(.v17)],
+    // Targets are internal to a package; only PRODUCTS are visible to anything
+    // outside it. Without this the iOS app cannot see PantryCore at all — the
+    // package resolves, and offers nothing to link against.
+    products: [
+        .library(name: "PantryCore", targets: ["PantryCore"]),
+    ],
     targets: [
         .target(
             name: "PantryCore",
             // The migrations ship INSIDE the library rather than beside it. An
             // app on a phone has to carry the instructions for upgrading its
             // own database; a .sql file sitting in the repo is no use to it.
-            resources: [.copy("Migrations")],
+            resources: [
+                .copy("Migrations"),
+                // The hand-collected 11-item inventory, so the app can import
+                // it on a device where the repository does not exist.
+                .copy("StarterData"),
+            ],
             // SQLite ships with macOS, so this is the only dependency and it
             // is already on the machine. No package resolution, no network.
             linkerSettings: [.linkedLibrary("sqlite3")]

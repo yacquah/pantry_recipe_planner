@@ -28,7 +28,7 @@ rm -f "$DB"        # -f: no complaint if it does not exist yet.
 swift build --package-path "$HERE/../core" >/dev/null
 "$HERE/../core/.build/debug/pantry" migrate --db "$DB"
 
-sqlite3 "$DB" < "$HERE/002_seed.sql"
+"$HERE/../core/.build/debug/pantry" seed --db "$DB"
 echo "seed loaded  ->  $DB"
 
 for q in "$HERE"/queries/*.sql; do
