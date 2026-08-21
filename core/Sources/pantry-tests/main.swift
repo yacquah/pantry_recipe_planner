@@ -213,6 +213,110 @@ suite("Migrations — schema versioning") {
     }
 }
 
+suite("Recipe requirement → base units — ADR 004") {
+    // Pure, so no database. What a recipe asks for, translated into the unit
+    // the product is actually stored in, plus how well the result is known.
+
+    // Same unit both sides. Counting is exact; measuring 400 g out of a bag
+    // is not, so the two carry different precision.
+    let rice = Consumption.requirement(
+        recipeQuantity: 400, recipeUnit: "g", baseUnit: "g", gramsEach: nil)
+    expect(rice?.amount, 400, "same unit passes the amount through")
+    expect(rice?.precision, "derived", "measuring out of a bag is derived, not measured")
+
+    let packs = Consumption.requirement(
+        recipeQuantity: 2, recipeUnit: "count", baseUnit: "count", gramsEach: nil)
+    expect(packs?.precision, "measured", "counting is exact")
+
+    // Grams needed, stored by the piece: 200 g of ~99 g wings is two wings.
+    let wings = Consumption.requirement(
+        recipeQuantity: 200, recipeUnit: "g", baseUnit: "count", gramsEach: 99.2)
+    expect(wings?.amount, 2, "grams convert to whole pieces, not fractions")
+
+    // Needing a little still means taking one. Rounding to zero would remove
+    // nothing from the ledger while the food had in fact been used.
+    expect(Consumption.requirement(
+        recipeQuantity: 10, recipeUnit: "g", baseUnit: "count", gramsEach: 99.2)?.amount,
+        1, "a small requirement still takes one whole piece")
+
+    // The other direction.
+    expect(Consumption.requirement(
+        recipeQuantity: 3, recipeUnit: "count", baseUnit: "g", gramsEach: 50)?.amount,
+        150, "pieces convert up into grams")
+
+    // No bridge, and units that cannot be reconciled at all.
+    expectTrue(Consumption.requirement(
+        recipeQuantity: 200, recipeUnit: "g", baseUnit: "count", gramsEach: nil) == nil,
+        "no piece weight means no requirement, rather than a guess")
+    expectTrue(Consumption.requirement(
+        recipeQuantity: 1, recipeUnit: "ml", baseUnit: "count", gramsEach: 50) == nil,
+        "ml into count is refused — density is not the same as piece weight")
+}
+
+suite("Checkpoint balance — ADR 005") {
+    let path = NSTemporaryDirectory() + "pantry-balance-\(UUID().uuidString).db"
+    defer { try? FileManager.default.removeItem(atPath: path) }
+
+    do {
+        let db = try Database(path: path)
+        try db.migrate()
+
+        let productId = try db.run(
+            "INSERT INTO product (canonical_name, base_unit) VALUES ('Test rice','g')")
+        let lotId = try db.run(
+            "INSERT INTO lot (product_id, acquired_on) VALUES (?, '2026-01-01')",
+            [.int(productId)])
+
+        func event(_ delta: Double?, _ reason: String, _ at: String, observed: Double? = nil) throws {
+            try db.run("""
+                INSERT INTO pantry_event
+                    (id, lot_id, product_id, delta_base_unit, reason,
+                     qty_precision, observed_qty, occurred_at, device_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'check')
+                """,
+                [.text(UUIDv7.generate()), .int(lotId), .int(productId),
+                 delta.map { SQLValue.double($0) } ?? .null, .text(reason),
+                 delta == nil ? .null : .text("derived"),
+                 observed.map { SQLValue.double($0) } ?? .null, .text(at)])
+        }
+
+        func balance() throws -> (Double?, Int) {
+            let rows = try db.query(
+                "SELECT balance, superseded_events FROM v_lot_balance WHERE lot_id = ?",
+                [.int(lotId)])
+            let row = rows.first
+            return (row?.double("balance"), Int(row?.int("superseded_events") ?? 0))
+        }
+
+        try event(1000, "CAPTURE", "2026-01-01T10:00:00")
+        try event(-200, "COOK",    "2026-01-05T10:00:00")
+        expect(try balance().0, 800, "with no recount, the balance is the whole ledger")
+
+        // The rule that was documented for weeks and never implemented: a
+        // recount observes reality, and reality already contains everything
+        // that happened before it. Note 500 is NOT 800 minus anything — the
+        // point is that the ledger had drifted and the eyes win.
+        try event(-300, "ADJUSTMENT", "2026-01-10T10:00:00", observed: 500)
+        let afterRecount = try balance()
+        expect(afterRecount.0, 500, "a recount replaces the balance outright")
+        expect(afterRecount.1, 2, "and supersedes the two events before it, not itself")
+
+        try event(-100, "COOK", "2026-01-12T10:00:00")
+        expect(try balance().0, 400, "later events are counted from the checkpoint")
+
+        // A late-arriving event from BEFORE the checkpoint must not move the
+        // balance — the recount already accounted for it, whether or not the
+        // app had heard about it (ADR 005, offline sync).
+        try event(-999, "CONSUME", "2026-01-06T10:00:00")
+        expect(try balance().0, 400, "an event older than the checkpoint is retained, not counted")
+        expect(try balance().1, 3, "and is reported as superseded rather than dropped silently")
+
+    } catch {
+        checksRun += 1
+        failures.append("Checkpoint suite threw unexpectedly: \(error)")
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 print("\n" + String(repeating: "-", count: 60))

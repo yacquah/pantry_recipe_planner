@@ -88,6 +88,9 @@ Application code next.
 - [x] Thin vertical slice: capture an item, derive its expiry, list it (`core/`)
 - [ ] Expiry notifications
 - [x] Cook-tonight matcher (`pantry cook`, with checks)
+- [x] Numbered schema migrations, so the device database can change safely
+- [x] The write path — `cook`, `waste`, `eat`, `recount` — and ADR 005's
+      checkpoint rule finally implemented rather than only described
 
 **Phase 2 (committed, not started)**
 

@@ -13,6 +13,12 @@ USAGE
   pantry cook    [--why] [--db PATH]
   pantry capture "verbatim text" --name NAME [options]
 
+FOOD LEAVING THE LEDGER
+  pantry cook "Recipe name" [--dry-run] [--force]
+  pantry waste   --lot N --qty N --reason expired|spoiled|freezer_burn|disliked|accident
+  pantry eat     --lot N --qty N
+  pantry recount --lot N --observed N       records what you actually saw
+
 CAPTURE OPTIONS
   --name NAME          required — the only thing a capture cannot go without
   --brand BRAND
@@ -138,6 +144,73 @@ do {
         \(report.lotsTotal) lots — \(report.notApplicable) not applicable, \
         \(report.excludedUnknown) could not be assessed
         """)
+
+    // `cook` with a recipe name actually cooks it. Without one it answers the
+    // question instead. Same verb, because they are the same act at different
+    // stages of making up your mind.
+    case "cook" where !positional.isEmpty:
+        let name = positional[0]
+        let consumption = Consumption(db: db)
+        let plan = try consumption.planCook(recipeNamed: name)
+
+        print("\(plan.recipeName)\n")
+        for draw in plan.draws {
+            print("  \(draw.productName.padded(30))"
+                + String(format: "-%g %@", draw.amount, draw.unit).padded(14)
+                + "lot \(draw.lotId)".padded(8)
+                + "(\(draw.precision))")
+        }
+        for problem in plan.problems { print("  ! \(problem)") }
+
+        if flags["dry-run"] != nil {
+            print("\ndry run — nothing written")
+            break
+        }
+        if !plan.isSatisfiable && flags["force"] == nil {
+            fail("not satisfiable. Fix the above, or pass --force to record it anyway.")
+        }
+
+        let written = try consumption.execute(plan, force: flags["force"] != nil)
+        print("\n\(written.count) COOK event(s) written")
+
+    case "waste":
+        guard let lot = flags["lot"].flatMap(Int64.init),
+              let qty = flags["qty"].flatMap(Double.init),
+              let why = flags["reason"] else {
+            fail("usage: pantry waste --lot N --qty N --reason expired|spoiled|freezer_burn|disliked|accident")
+        }
+        let id = try Consumption(db: db).waste(
+            lotId: lot, quantity: qty, reason: why,
+            precision: flags["precision"] ?? "estimated")
+        print("WASTE recorded (\(why))  event \(id)")
+
+    case "eat":
+        guard let lot = flags["lot"].flatMap(Int64.init),
+              let qty = flags["qty"].flatMap(Double.init) else {
+            fail("usage: pantry eat --lot N --qty N")
+        }
+        let id = try Consumption(db: db).consume(
+            lotId: lot, quantity: qty,
+            precision: flags["precision"] ?? "estimated")
+        print("CONSUME recorded  event \(id)")
+
+    case "recount":
+        guard let lot = flags["lot"].flatMap(Int64.init),
+              let observed = flags["observed"].flatMap(Double.init) else {
+            fail("usage: pantry recount --lot N --observed N")
+        }
+        let consumption = Consumption(db: db)
+        let before = try consumption.balance(ofLot: lot)
+        let id = try consumption.adjust(
+            lotId: lot, observed: observed,
+            precision: flags["precision"] ?? "estimated")
+        let previous = before.balance.map { String(format: "%g", $0) } ?? "unknown"
+        print("""
+            recount of \(before.productName)
+              ledger said  \(previous)
+              you observed \(observed)
+            ADJUSTMENT recorded — this is now the checkpoint.  event \(id)
+            """)
 
     case "cook":
         let matches = try Matcher(db: db).cookTonight()

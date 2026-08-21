@@ -146,33 +146,30 @@ public struct Matcher {
 
     public func cookTonight() throws -> [RecipeMatch] {
         let rows = try db.query("""
+            -- Balance and bridge both come from views now, not from sums and
+            -- CASE expressions written here. Before, this summed the ledger
+            -- directly and would have ignored a recount entirely: ADR 005 says
+            -- an ADJUSTMENT is a checkpoint that supersedes earlier events, and
+            -- a caller doing its own SUM cannot know that. Any consumer that
+            -- reimplements a shared rule eventually disagrees with the others.
             WITH on_hand AS (
-              SELECT l.product_id,
-                     SUM(e.delta_base_unit) AS qty,
-                     SUM(CASE WHEN e.delta_base_unit IS NULL THEN 1 ELSE 0 END) AS unknown_events
-                FROM pantry_event e JOIN lot l ON l.id = e.lot_id
-               GROUP BY l.product_id
-            ),
-            measured AS (
-              SELECT product_id, AVG(measured_piece_weight_g) AS grams_each
-                FROM lot WHERE measured_piece_weight_g IS NOT NULL
+              SELECT product_id,
+                     SUM(balance)        AS qty,
+                     SUM(unknown_events) AS unknown_events
+                FROM v_lot_balance
                GROUP BY product_id
             )
             SELECT r.name AS recipe, p.canonical_name AS ingredient,
                    ri.qty AS need_qty, ri.unit AS need_unit, p.base_unit,
                    oh.qty AS have_qty,
                    COALESCE(oh.unknown_events, 0) AS unknown_events,
-                   COALESCE(m.grams_each, pw.typical_g) AS grams_each,
-                   CASE WHEN m.grams_each IS NOT NULL THEN 'measured'
-                        WHEN pw.min_g = pw.max_g      THEN 'printed'
-                        WHEN pw.typical_g IS NOT NULL THEN 'reference'
-                        ELSE NULL END AS bridge_source
+                   w.grams_each,
+                   w.source AS bridge_source
               FROM recipe_ingredient ri
               JOIN recipe  r ON r.id = ri.recipe_id
               JOIN product p ON p.id = ri.product_id
               LEFT JOIN on_hand oh ON oh.product_id = ri.product_id
-              LEFT JOIN piece_weight_curated pw ON pw.product_id = ri.product_id
-              LEFT JOIN measured m ON m.product_id = ri.product_id
+              LEFT JOIN v_piece_weight w ON w.product_id = ri.product_id
              ORDER BY r.name, p.canonical_name
             """)
 

@@ -8,44 +8,22 @@
 .headers on
 
 WITH on_hand AS (
-  -- Quantity is derived, never stored (ADR 003).
-  SELECT
-    l.product_id,
-    SUM(e.delta_base_unit) AS qty,
-    SUM(CASE WHEN e.delta_base_unit IS NULL THEN 1 ELSE 0 END) AS unknown_events
-  FROM pantry_event e
-  JOIN lot l ON l.id = e.lot_id
-  GROUP BY l.product_id
+  -- Quantity is derived, never stored (ADR 003) — and derived through
+  -- v_lot_balance rather than by summing here, so that a recount is honoured.
+  -- ADR 005 makes an ADJUSTMENT a checkpoint that supersedes earlier events;
+  -- a caller doing its own SUM cannot know that and would answer with history
+  -- the user has already corrected.
+  SELECT product_id,
+         SUM(balance)        AS qty,
+         SUM(unknown_events) AS unknown_events
+  FROM v_lot_balance
+  GROUP BY product_id
 ),
 bridge AS (
-  -- ADR 004's piece-weight chain, in order. Tier 2 (this user's measurement
-  -- history) is absent because there is no history yet; tier 4 (a vendored
-  -- reference dataset) is not in v1.
-  SELECT
-    p.id AS product_id,
-    COALESCE(m.measured_g, pw.typical_g) AS g_each,
-    CASE
-      -- Tier 1: weighed on this lot. The per-piece figure is an average, but
-      -- the TOTAL it reconstructs is exact, because the total is what was
-      -- actually weighed. Aggregating back over the same set is lossless —
-      -- it is dividing down to a single piece that introduces error.
-      WHEN m.measured_g IS NOT NULL THEN 'measured'
-      -- Tier 3, manufactured: min = max records a printed weight with no
-      -- spread, so it is exact in both directions.
-      WHEN pw.min_g = pw.max_g      THEN 'printed'
-      -- Tier 3, natural: a reference average. Genuinely approximate.
-      WHEN pw.typical_g IS NOT NULL THEN 'reference'
-      ELSE NULL                     -- Tier 5: no bridge exists
-    END AS bridge_source
-  FROM product p
-  LEFT JOIN piece_weight_curated pw ON pw.product_id = p.id
-  LEFT JOIN (
-    -- Averaged across lots. With one lot per product this is exact; when a
-    -- product has several, the FEFO lot's own measurement would be better.
-    SELECT product_id, AVG(measured_piece_weight_g) AS measured_g
-    FROM lot WHERE measured_piece_weight_g IS NOT NULL
-    GROUP BY product_id
-  ) m ON m.product_id = p.id
+  -- ADR 004's piece-weight chain, from the view both implementations share.
+  -- `source` is what decides whether an answer may be stated confidently.
+  SELECT product_id, grams_each AS g_each, source AS bridge_source
+  FROM v_piece_weight
 ),
 judged AS (
   SELECT

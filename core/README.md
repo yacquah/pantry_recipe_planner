@@ -25,6 +25,12 @@ pantry list --all               # every lot, and where its date came from
 pantry cook                     # what can I cook tonight
 pantry cook --why               # ...and the working behind each verdict
 
+pantry cook "Jollof-ish rice" --dry-run   # what cooking it would remove
+pantry cook "Jollof-ish rice"             # ...and actually remove it
+pantry waste   --lot 11 --qty 2 --reason freezer_burn
+pantry eat     --lot 1 --qty 200
+pantry recount --lot 1 --observed 4000    # what your eyes actually saw
+
 pantry capture "half a bag of red lentils" --name "Red lentils" \
     --unit g --qty 250 --class ambient_stable --precision estimated
 ```
@@ -56,6 +62,7 @@ Sources/PantryCore/     the logic — no printing, no argument parsing
   Capture.swift         raw_capture -> product -> lot -> ledger, transactional
   Expiry.swift          reads ADR 001's chain out of v_lot_expiry
   Matcher.swift         ADR 004's verdict rules, as pure functions
+  Consumption.swift     cook / waste / eat / recount — the write path
 Sources/pantry/
   main.swift            argument parsing and output, nothing else
 Sources/pantry-tests/
@@ -90,6 +97,51 @@ wrong answer is the worse failure.
 `schema/build.sh` applies migrations through this same code rather than piping
 SQL in, so the development database and the one on a phone are built by an
 identical path.
+
+## Food leaving the ledger
+
+`CAPTURE` was the only event the code ever wrote, which made the ledger a
+write-once log and left ADR 003's whole argument — that waste causes must be
+recorded from day one — with nothing accumulating. Four commands close that:
+
+- **`cook "Recipe"`** plans first and writes second. It converts each
+  ingredient into the product's own base unit, draws from lots in **FEFO**
+  order (first expired, first out — undated lots last, since a known deadline
+  outranks an unknown one), and refuses a recipe it cannot satisfy unless
+  `--force`. `--dry-run` shows the plan without writing. Plan and execute are
+  separate types, which is why the dry run is not a second code path that can
+  drift from the real one.
+- **`waste --reason ...`** records *why*, not just how much. That column is
+  the one that answers "am I wasting less, and at what."
+- **`eat`** is eating straight from the bag — same mechanism, different meaning.
+- **`recount --observed N`** writes an `ADJUSTMENT`: what your eyes actually
+  saw, which then supersedes everything before it.
+
+Two rules the code follows that are easy to get wrong. Counting is exact, so
+taking 2 packs is `measured`; measuring 400 g out of a bag is `derived`.
+And a requirement that converts to a fraction of a piece rounds to a whole one
+and **never to zero** — needing a little still means taking one.
+
+## Balance, and why it is a view
+
+`v_lot_balance` is the single answer to "how much is in this lot", and it
+implements ADR 005's checkpoint rule: a recount is not another delta, it
+*replaces* the balance, because a recount observes reality and reality already
+contains everything that happened before it.
+
+```
+balance = the observed value at the last recount
+        + only the deltas that occurred after it
+```
+
+Earlier events stay in the ledger — they still feed waste analysis — but are
+excluded from the balance and reported as `superseded_events` rather than
+dropped silently.
+
+The matcher used to sum `pantry_event` itself and would therefore have ignored
+recounts entirely. It reads the view now. `v_piece_weight` exists for the same
+reason: cooking and matching both need ADR 004's bridge, and two copies of a
+resolution chain is precisely the drift a view prevents.
 
 ## Where the logic lives, and why it differs by feature
 
