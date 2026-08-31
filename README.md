@@ -77,7 +77,7 @@ Design is settled — the spec, nine decision records and the schema are done.
 
 A headless Swift package: `PantryCore` holds the logic, `pantry` is a thin CLI
 over it, and the iOS app imports the same library rather than reimplementing
-any of it. 73 checks pass via `swift run pantry-tests`.
+any of it. 39 tests across 9 suites pass via `swift test`.
 
 | Capability | Where it lives |
 |---|---|
@@ -151,6 +151,12 @@ sequence is that nothing was coded until the ambiguity was gone.
 | Moved the starter inventory into the library | A sandboxed app cannot read the repository it was built from |
 | iOS app and its expiring list | Verified on a clean simulator install, tap-driven |
 | Expiry reminders, end to end | The headline v1 feature. Lead time varies by shelf life; four separate reasons to stay silent; checks 47 → 73 |
+
+**Tooling — 31 August**
+
+| Milestone | What it settled |
+|---|---|
+| Hand-rolled check runner → Swift Testing | The original runner could not tell "did not run" from "passed", and one assertion behind an unreachable branch had been silently skipping. Ported against the old runner, then removed it |
 
 ## What the seed data already taught me
 

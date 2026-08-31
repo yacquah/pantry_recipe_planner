@@ -38,11 +38,18 @@ pantry capture "half a bag of red lentils" --name "Red lentils" \
 ## Checks
 
 ```bash
-swift run pantry-tests
+swift test
 ```
 
-21 checks, no database and no fixtures, because everything they cover is a
-pure function. They exit non-zero on failure.
+39 tests in 9 suites, under Swift Testing. Most cover pure functions and need
+no database; the migration and checkpoint suites each build a throwaway one on
+a unique path, because what they check is precisely what happens to a file
+that already exists.
+
+These began as a hand-rolled runner in an executable target, since XCTest and
+Swift Testing ship inside Xcode and Xcode was not installed at the time. The
+port removed the one flaw that setup could not detect: an assertion behind a
+branch that never ran counted as passing.
 
 They are an ordinary executable rather than a `.testTarget`, and that is not a
 preference: on macOS **both XCTest and Swift Testing ship inside Xcode**, not
@@ -65,8 +72,8 @@ Sources/PantryCore/     the logic — no printing, no argument parsing
   Consumption.swift     cook / waste / eat / recount — the write path
 Sources/pantry/
   main.swift            argument parsing and output, nothing else
-Sources/pantry-tests/
-  main.swift            checks, runnable without Xcode
+Tests/PantryCoreTests/
+  *.swift               one suite per area, run with `swift test`
 ```
 
 ## Migrations
