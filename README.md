@@ -99,7 +99,9 @@ came from, then what is running low and what the app cannot describe. **Cook**
 answers what is possible tonight with the four-state verdict intact —
 `CANNOT TELL` is styled as a question, not a refusal, because making it look
 like failure is how a four-state answer quietly becomes three. **Add** records
-an item by hand; only a name is required (ADR 002).
+an item by hand; only a name is required (ADR 002). Food leaves the same way it
+arrives: swipe a lot to record eating, binning or a recount, or cook a recipe
+from the Cook tab with the amounts editable before anything is written.
 
 **Expiry reminders work.** The phone schedules them, defers the permission
 prompt until there is something real to ask about, and reports what iOS
@@ -110,13 +112,10 @@ nothing rather than empty when the amount is unknown, an ingredient reads
 "have unknown" rather than "have 0", and "running low" stays empty in a full
 cupboard instead of ranking its emptiest shelf.
 
-7 store tests and 3 UI tests run with `xcodebuild test`.
+14 store tests and 5 UI tests run with `xcodebuild test`.
 
 ### What v1 still needs
 
-- [ ] **The rest of the write path.** Manual capture works from the phone;
-      cook, waste and recount are still CLI-only. Daily use is the trigger
-      ADR 008 set for starting phase 2.
 - [ ] **Barcode capture.** Spec §2 makes v1 barcode-first. The schema is ready
       (`product_barcode`, `raw_capture.barcode`, and a `lookup_status` that
       resolves on reconnect); the scanner and the lookup are not written.
@@ -171,6 +170,7 @@ sequence is that nothing was coded until the ambiguity was gone.
 |---|---|
 | Hand-rolled check runner → Swift Testing | The original runner could not tell "did not run" from "passed", and one assertion behind an unreachable branch had been silently skipping. Ported against the old runner, then removed it |
 | Three tabs, and writing from the phone | An inventory API the engine never had, `CANNOT TELL` given a design of its own, and the store made testable — its database path was hard-wired to the real pantry |
+| Food can leave the ledger from the phone | The loop closed. Until this, capture was the only write path, so quantities only ever rose and "running low" was unreachable by construction |
 
 ## What the seed data already taught me
 
