@@ -173,6 +173,39 @@ do {
         let written = try consumption.execute(plan, force: flags["force"] != nil)
         print("\n\(written.count) COOK event(s) written")
 
+    // What is actually in the kitchen and how much. The expiry chain answers
+    // what is going off and the matcher answers what can be cooked; neither
+    // answers this, which is the question a pantry screen opens with.
+    case "inventory":
+        let inventory = Inventory(db: db)
+        let items = try inventory.all()
+
+        print("ITEM                             LEFT          OF CAPTURED   ACTS BY")
+        print(String(repeating: "-", count: 84))
+        for item in items {
+            let left = item.balance.map { qty in
+                String(format: "%g %@", qty, item.baseUnit ?? "")
+            } ?? "unknown"
+            let fraction = item.remainingFraction.map { "\(Int(($0 * 100).rounded()))%" } ?? "—"
+            print(item.name.padded(33)
+                + left.padded(14)
+                + fraction.padded(14)
+                + (item.effectiveDate ?? "—"))
+        }
+
+        let attention = try inventory.needingAttention()
+        if !attention.isEmpty {
+            print("\nNeeds attention — \(attention.count) lot(s) the app cannot fully describe")
+            for item in attention {
+                print("  \(item.name.padded(33))\(item.attentionReason ?? "")")
+            }
+        }
+
+        // Rule 4: the answer states what it left out of the measurable list.
+        let measurable = items.filter { $0.remainingFraction != nil }.count
+        print("\n\(items.count) lots — \(measurable) can be measured, "
+            + "\(items.count - measurable) cannot")
+
     // What the phone should have pending. The phone is the only thing that can
     // actually post a notification, but the decision about which ones exist is
     // a rule, and rules are inspectable from here like every other one.
