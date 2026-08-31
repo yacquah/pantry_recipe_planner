@@ -104,15 +104,29 @@ public struct Inventory {
         try all().filter(\.needsAttention)
     }
 
-    /// What is furthest through, for "running low".
+    /// Default threshold for "low": a third left.
+    ///
+    /// A heuristic, and openly one — like spec §5's lead time, it is a number
+    /// to tune against a kitchen rather than a derived truth. The right answer
+    /// would be a par level per product, which v1 does not ask anyone for.
+    public static let lowThreshold = 0.35
+
+    /// Lots that are genuinely running out.
+    ///
+    /// Takes a threshold rather than just the n lowest, because "the three
+    /// emptiest things in a full cupboard" are not running low, and a screen
+    /// that says they are is making a confident claim that is simply false.
+    /// An empty result is the correct answer to a well-stocked kitchen.
     ///
     /// Lots whose remaining fraction cannot be computed are **excluded rather
     /// than sorted to one end** — a lot with an unknown quantity is not
     /// "full", and putting it anywhere on a scale of fullness would state
     /// something nobody knows. They appear under attention instead.
-    public func runningLow(limit: Int = 5) throws -> [InventoryItem] {
+    public func runningLow(below threshold: Double = lowThreshold,
+                           limit: Int = 5) throws -> [InventoryItem] {
         try all()
             .compactMap { item in item.remainingFraction.map { (item, $0) } }
+            .filter { $0.1 < threshold }
             .sorted { $0.1 < $1.1 }
             .prefix(limit)
             .map(\.0)

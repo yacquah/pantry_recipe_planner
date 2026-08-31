@@ -1,163 +1,109 @@
 import SwiftUI
 import PantryCore
 
+/// The three questions this app answers, one per tab: what is in here, what
+/// can I cook, and how do I put something in.
+///
+/// A plain `TabView` rather than anything custom. The Liquid Glass treatment
+/// comes later and iOS 26 applies most of it to the standard bar for free —
+/// hand-rolling the bar now would be work to be undone.
 struct ContentView: View {
     @State private var store = PantryStore()
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let message = store.errorMessage {
-                    ProblemView(message: message)
-                } else if store.isEmpty {
-                    EmptyPantryView { store.importStarterInventory() }
-                } else {
-                    PantryList(store: store)
-                }
+        TabView {
+            Tab("Pantry", systemImage: "basket") {
+                PantryTab(store: store)
             }
-            .navigationTitle("Pantry")
+            Tab("Cook", systemImage: "fork.knife") {
+                CookTab(store: store)
+            }
+            Tab("Add", systemImage: "viewfinder") {
+                AddTab(store: store)
+            }
         }
         .task { store.start() }
     }
 }
 
-// MARK: - The list
+// MARK: - Shared pieces
 
-private struct PantryList: View {
-    let store: PantryStore
+/// A headline card: a quiet label, one large answer, and the qualification
+/// that keeps the answer honest.
+///
+/// The third line is not decoration. Modelling rule 4 says an aggregate states
+/// what it left out, so the card that reports a number is the card that has to
+/// carry the exclusions.
+struct SummaryCard<Detail: View>: View {
+    let label: String
+    let headline: String
+    let tint: Color
+    @ViewBuilder var detail: Detail
 
     var body: some View {
-        List {
-            if let soon = store.expiringSoon {
-                Section {
-                    if soon.items.isEmpty {
-                        Text("Nothing expiring in the next 3 days.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(soon.items, id: \.lotId) { item in
-                            ExpiryRow(item: item)
-                        }
-                    }
-                } header: {
-                    Text("Act soon")
-                } footer: {
-                    // Modelling rule 4: an answer states what it could not
-                    // assess. A total that quietly skips rows is worse than
-                    // one that refuses, because nobody questions it.
-                    Text("\(soon.lotsTotal) lots · \(soon.notApplicable) not applicable · "
-                         + "\(soon.excludedUnknown) could not be assessed")
-                }
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(0.6)
+                .foregroundStyle(tint)
+            Text(headline)
+                .font(.title2.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            detail
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(tint.opacity(0.10), in: .rect(cornerRadius: 16))
+    }
+}
 
-            if let next = store.alerts.first {
-                Section {
-                    LabeledContent {
-                        Text(next.fireAt, format: .dateTime.day().month().year())
-                            .monospacedDigit()
-                    } label: {
-                        Text(next.item)
-                        Text("\(next.leadDays) day(s) before it needs using")
-                    }
-                } header: {
-                    Text("Next reminder")
-                } footer: {
-                    // The bell on a row promises a notification. This reports
-                    // what iOS confirmed it holds — not what was planned — so
-                    // a refused permission cannot look like a working reminder.
-                    if store.notificationsRefused {
-                        Text("Notifications are off, so nothing will be sent. "
-                             + "Turn them on in Settings to be reminded.")
-                    } else {
-                        Text(store.scheduledCount == 1
-                             ? "1 reminder scheduled."
-                             : "\(store.scheduledCount) reminders scheduled.")
-                    }
-                }
-            }
+/// How much of a lot is left, as a bar.
+///
+/// Renders nothing at all when the fraction is unknown. A bar defaulting to
+/// empty or full would state a quantity nobody has ever measured, which is the
+/// exact failure rule 3 exists to prevent.
+struct RemainingBar: View {
+    let fraction: Double?
 
-            Section("Everything") {
-                ForEach(store.items, id: \.lotId) { item in
-                    ExpiryRow(item: item)
+    var body: some View {
+        if let fraction {
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary)
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: geometry.size.width * min(fraction, 1))
                 }
             }
+            .frame(height: 5)
+        }
+    }
+
+    /// Colour tracks how little is left, not how much — the warning is the
+    /// point of the bar.
+    private var tint: Color {
+        switch fraction ?? 1 {
+        case ..<0.15: .red
+        case ..<0.35: .orange
+        default:      .green
         }
     }
 }
 
-private struct ExpiryRow: View {
-    let item: ExpiryItem
+/// A quantity, or an honest refusal to state one.
+struct QuantityText: View {
+    let item: InventoryItem
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.item)
-                Text(provenance)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-
-            VStack(alignment: .trailing, spacing: 2) {
-                // Never a bare date. A date the app worked out and a date a
-                // human read off a label look identical unless you say which
-                // it is, and that ambiguity is what ADR 001 exists to prevent.
-                Text(item.effectiveDate.isEmpty ? "—" : item.displayDate)
-                    .monospacedDigit()
-                if item.shouldPush {
-                    Label("alerts", systemImage: "bell.fill")
-                        .font(.caption2)
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(.orange)
-                }
-            }
-            .font(.subheadline)
-        }
-        .padding(.vertical, 2)
-    }
-
-    /// Where the date came from, in words rather than a column name.
-    private var provenance: String {
-        switch item.source {
-        case "label":          return "from the label" + (item.kind.map { " · \($0.replacingOccurrences(of: "_", with: " "))" } ?? "")
-        case "not_applicable": return "does not expire"
-        case "unknown":        return "no date, and none can be worked out"
-        default:               return "worked out from " + item.source
-                                        .replacingOccurrences(of: "derived_", with: "")
+        if let balance = item.balance {
+            Text("\(balance.formatted(.number.precision(.fractionLength(0...1)))) \(item.baseUnit ?? "")")
+                .monospacedDigit()
+        } else {
+            Text("unknown")
+                .foregroundStyle(.secondary)
+                .italic()
         }
     }
-}
-
-// MARK: - The other two states
-
-private struct EmptyPantryView: View {
-    let importStarter: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Nothing captured yet", systemImage: "basket")
-        } description: {
-            Text("Import the hand-collected inventory to see the app working "
-                 + "against real data.")
-        } actions: {
-            Button("Import starter inventory", action: importStarter)
-                .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-private struct ProblemView: View {
-    let message: String
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Could not open the pantry", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message).font(.footnote).monospaced()
-        }
-    }
-}
-
-#Preview {
-    ContentView()
 }

@@ -174,7 +174,8 @@ struct InventoryTests {
             try f.event(unmeasurable, nil, "CAPTURE", "2026-01-01T10:00:00")
 
             let low = try Inventory(db: db).runningLow()
-            #expect(low.map(\.lotId) == [nearlyGone, full])
+            #expect(low.map(\.lotId) == [nearlyGone],
+                    "only what is actually low — a full lot is not running out")
             #expect(low.contains { $0.lotId == unmeasurable } == false)
 
             // It is not lost, only reported somewhere it can be acted on.
@@ -186,12 +187,28 @@ struct InventoryTests {
     func runningLowLimit() throws {
         try withTemporaryDatabase { db in
             let f = try Fixture(db)
-            for taken in [100.0, 200, 300, 400, 500, 600] {
+            // All well below the threshold, so the limit is what does the work.
+            for taken in [700.0, 750, 800, 850, 900, 950] {
                 let lot = try f.lot()
                 try f.event(lot, 1000, "CAPTURE", "2026-01-01T10:00:00")
                 try f.event(lot, -taken, "COOK",  "2026-01-05T10:00:00")
             }
             #expect(try Inventory(db: db).runningLow(limit: 3).count == 3)
+        }
+    }
+
+    /// A well-stocked kitchen has nothing running low, and saying otherwise
+    /// would be a confident claim that is simply false.
+    @Test("a full cupboard reports nothing low, rather than its emptiest shelf")
+    func fullCupboardIsNotLow() throws {
+        try withTemporaryDatabase { db in
+            let f = try Fixture(db)
+            for taken in [0.0, 50, 100] {
+                let lot = try f.lot()
+                try f.event(lot, 1000, "CAPTURE", "2026-01-01T10:00:00")
+                if taken > 0 { try f.event(lot, -taken, "COOK", "2026-01-05T10:00:00") }
+            }
+            #expect(try Inventory(db: db).runningLow().isEmpty)
         }
     }
 }

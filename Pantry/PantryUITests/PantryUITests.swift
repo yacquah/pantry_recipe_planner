@@ -1,43 +1,69 @@
-//
-//  PantryUITests.swift
-//  PantryUITests
-//
-//  Created by Yaw Acquah on 8/20/26.
-//
-
 import XCTest
 
+/// The things only a running app can prove: that the three tabs exist, that
+/// they switch, and that each one puts its own screen on the display.
+///
+/// Deliberately shallow. What each screen *says* is decided in PantryCore and
+/// checked there in milliseconds; driving the simulator to re-check a rule
+/// would be the slowest possible way to learn something already known. These
+/// check the wiring, which nothing else can.
 final class PantryUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testTheThreeTabsExist() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        for tab in ["Pantry", "Cook", "Add"] {
+            XCTAssertTrue(
+                app.tabBars.buttons[tab].waitForExistence(timeout: 5),
+                "the \(tab) tab should be reachable"
+            )
+        }
     }
 
     @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
+    func testEachTabShowsItsOwnScreen() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        XCTAssertTrue(app.navigationBars["Pantry"].waitForExistence(timeout: 5),
+                      "the app opens on the pantry")
+
+        app.tabBars.buttons["Cook"].tap()
+        XCTAssertTrue(app.navigationBars["Cook tonight"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Add"].tap()
+        XCTAssertTrue(app.navigationBars["Add"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Pantry"].tap()
+        XCTAssertTrue(app.navigationBars["Pantry"].waitForExistence(timeout: 5),
+                      "and going back returns to it")
+    }
+
+    /// Manual entry has to be reachable and dismissable. It is the only way to
+    /// put food in from the phone, so a sheet that cannot be opened or closed
+    /// is a broken app however correct the engine underneath is.
+    @MainActor
+    func testManualCaptureOpensAndCloses() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.tabBars.buttons["Add"].tap()
+        app.buttons["Enter by hand"].tap()
+
+        XCTAssertTrue(app.navigationBars["Enter by hand"].waitForExistence(timeout: 5))
+
+        // Save stays disabled until there is a name, because identity is the
+        // one thing a capture cannot go without (ADR 002).
+        XCTAssertFalse(app.buttons["Save"].isEnabled,
+                       "an unnamed item cannot be saved")
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.navigationBars["Add"].waitForExistence(timeout: 5))
     }
 }
