@@ -77,7 +77,7 @@ Design is settled — the spec, nine decision records and the schema are done.
 
 A headless Swift package: `PantryCore` holds the logic, `pantry` is a thin CLI
 over it, and the iOS app imports the same library rather than reimplementing
-any of it. 39 tests across 9 suites pass via `swift test`.
+any of it. 48 tests across 10 suites pass via `swift test`.
 
 | Capability | Where it lives |
 |---|---|
@@ -88,22 +88,35 @@ any of it. 39 tests across 9 suites pass via `swift test`.
 | Checkpoint rule: a recount supersedes rather than sums (ADR 005) | `v_lot_balance` |
 | Numbered device migrations, carried inside the library (ADR 009) | `pantry migrate` |
 | Which lots may interrupt you, when, and in what words (ADR 001, spec §5) | `pantry alerts` |
+| What is on hand, how much, and how far through it you are | `pantry inventory` |
 
-### The app (`Pantry/`) — one screen
+### The app (`Pantry/`) — three tabs
 
-SwiftUI, iOS 17+, a single SQLite database in Application Support. It shows
-what is expiring and everything on hand, each date labelled with where it came
-from, and offers a one-tap import of the real 11-item inventory into an empty
-install. **Expiry reminders work** — the phone schedules them, defers the
-permission prompt until there is something real to ask about, and reports what
-iOS confirms it is holding rather than what was planned. Everything else the
-ledger can do is still reachable only from the CLI.
+SwiftUI, a single SQLite database in Application Support, no logic of its own.
+
+**Pantry** opens on what is about to go bad, each date labelled with where it
+came from, then what is running low and what the app cannot describe. **Cook**
+answers what is possible tonight with the four-state verdict intact —
+`CANNOT TELL` is styled as a question, not a refusal, because making it look
+like failure is how a four-state answer quietly becomes three. **Add** records
+an item by hand; only a name is required (ADR 002).
+
+**Expiry reminders work.** The phone schedules them, defers the permission
+prompt until there is something real to ask about, and reports what iOS
+confirms it is holding rather than what was planned.
+
+Three things the UI refuses to do, all the same rule: a quantity bar renders
+nothing rather than empty when the amount is unknown, an ingredient reads
+"have unknown" rather than "have 0", and "running low" stays empty in a full
+cupboard instead of ranking its emptiest shelf.
+
+7 store tests and 3 UI tests run with `xcodebuild test`.
 
 ### What v1 still needs
 
-- [ ] **Writing from the app.** Capture, cook, waste and recount have no UI.
-      Until they do the app cannot be used in a kitchen — and daily use is the
-      trigger ADR 008 set for starting phase 2.
+- [ ] **The rest of the write path.** Manual capture works from the phone;
+      cook, waste and recount are still CLI-only. Daily use is the trigger
+      ADR 008 set for starting phase 2.
 - [ ] **Barcode capture.** Spec §2 makes v1 barcode-first. The schema is ready
       (`product_barcode`, `raw_capture.barcode`, and a `lookup_status` that
       resolves on reconnect); the scanner and the lookup are not written.
@@ -157,6 +170,7 @@ sequence is that nothing was coded until the ambiguity was gone.
 | Milestone | What it settled |
 |---|---|
 | Hand-rolled check runner → Swift Testing | The original runner could not tell "did not run" from "passed", and one assertion behind an unreachable branch had been silently skipping. Ported against the old runner, then removed it |
+| Three tabs, and writing from the phone | An inventory API the engine never had, `CANNOT TELL` given a design of its own, and the store made testable — its database path was hard-wired to the real pantry |
 
 ## What the seed data already taught me
 
