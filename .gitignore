@@ -42,3 +42,6 @@ build/
 # /node_modules
 # /vendor/bundle
 # /.bundle
+
+# Xcode workspace settings — an empty plist Xcode regenerates
+*.xcsettings
