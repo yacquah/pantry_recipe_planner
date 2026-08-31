@@ -10,6 +10,16 @@ import PantryCore
 struct PantryTab: View {
     let store: PantryStore
 
+    /// Which lot is being acted on, and how. One piece of state rather than a
+    /// boolean per action, so two sheets can never both think they are open.
+    @State private var pending: PendingAction?
+
+    struct PendingAction: Identifiable {
+        let item: InventoryItem
+        let action: LedgerAction
+        var id: String { "\(item.lotId).\(action.rawValue)" }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -22,7 +32,39 @@ struct PantryTab: View {
                 }
             }
             .navigationTitle("Pantry")
+            .sheet(item: $pending) { pending in
+                LedgerSheet(store: store, item: pending.item, action: pending.action)
+            }
         }
+    }
+
+    /// Eat, bin and recount, on every lot.
+    ///
+    /// Swipes rather than a detail screen: these are the gestures that happen
+    /// while standing at a counter with one hand, and burying them a tap deep
+    /// is how a ledger stops being kept.
+    @ViewBuilder
+    private func actions(for item: InventoryItem) -> some View {
+        Button {
+            pending = PendingAction(item: item, action: .recount)
+        } label: {
+            Label("Recount", systemImage: LedgerAction.recount.symbol)
+        }
+        .tint(.blue)
+
+        Button {
+            pending = PendingAction(item: item, action: .waste)
+        } label: {
+            Label("Threw out", systemImage: LedgerAction.waste.symbol)
+        }
+        .tint(.red)
+
+        Button {
+            pending = PendingAction(item: item, action: .eat)
+        } label: {
+            Label("Ate", systemImage: LedgerAction.eat.symbol)
+        }
+        .tint(.green)
     }
 
     private var list: some View {
@@ -74,7 +116,10 @@ struct PantryTab: View {
 
             if !store.runningLow.isEmpty {
                 Section {
-                    ForEach(store.runningLow) { StockRow(item: $0) }
+                    ForEach(store.runningLow) { item in
+                        StockRow(item: item)
+                            .swipeActions(edge: .trailing) { actions(for: item) }
+                    }
                 } header: {
                     Text("Running low")
                 } footer: {
@@ -105,7 +150,10 @@ struct PantryTab: View {
             }
 
             Section("Everything") {
-                ForEach(store.stock) { StockRow(item: $0) }
+                ForEach(store.stock) { item in
+                    StockRow(item: item)
+                        .swipeActions(edge: .trailing) { actions(for: item) }
+                }
             }
         }
     }

@@ -9,6 +9,10 @@ import PantryCore
 struct CookTab: View {
     let store: PantryStore
 
+    /// The plan being confirmed, if any. Held rather than recomputed on every
+    /// body pass — planning reads the database.
+    @State private var planning: CookPlan?
+
     var body: some View {
         NavigationStack {
             Group {
@@ -25,6 +29,9 @@ struct CookTab: View {
                 }
             }
             .navigationTitle("Cook tonight")
+            .sheet(item: $planning) { plan in
+                CookSheet(store: store, plan: plan)
+            }
         }
     }
 
@@ -47,7 +54,16 @@ struct CookTab: View {
 
             ForEach(store.recipes, id: \.recipe) { match in
                 Section {
-                    RecipeCard(match: match)
+                    Button {
+                        planning = store.plan(forRecipe: match.recipe)
+                    } label: {
+                        RecipeCard(match: match)
+                    }
+                    .buttonStyle(.plain)
+                    // A recipe the matcher cannot vouch for is not offered for
+                    // cooking. Writing a cook off an unknown quantity would put
+                    // a confident number into the ledger on no evidence.
+                    .disabled(match.verdict == .cannotTell)
                 }
             }
         }

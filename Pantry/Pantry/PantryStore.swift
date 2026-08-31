@@ -168,6 +168,63 @@ final class PantryStore {
         }
     }
 
+    // MARK: - Food leaving
+
+    /// What cooking this recipe would take off the ledger, before anything is
+    /// written. Nil when the recipe cannot be planned at all.
+    ///
+    /// Planning and executing are separate in PantryCore precisely so a screen
+    /// can show the working first. ADR 003: never decrement silently.
+    func plan(forRecipe name: String) -> CookPlan? {
+        guard let database else { return nil }
+        do {
+            return try Consumption(db: database).planCook(recipeNamed: name)
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
+    /// Writes a COOK event per lot the plan draws from.
+    func cook(_ plan: CookPlan) {
+        write { try Consumption(db: $0).execute(plan) }
+    }
+
+    /// Eating straight from the bag — a CONSUME, not a COOK, because no
+    /// recipe accounts for it (ADR 003).
+    func eat(lot: Int64, quantity: Double, precision: String) {
+        write { try Consumption(db: $0).consume(lotId: lot, quantity: quantity, precision: precision) }
+    }
+
+    /// Binning something, with the cause. The sub-reason is the point: this app
+    /// exists to reduce waste, and different causes indict different things.
+    func waste(lot: Int64, quantity: Double, reason: String, precision: String) {
+        write {
+            try Consumption(db: $0).waste(
+                lotId: lot, quantity: quantity, reason: reason, precision: precision)
+        }
+    }
+
+    /// A recount. Becomes the checkpoint every later event is measured from,
+    /// rather than another delta on the pile (ADR 005) — the eyes beat the
+    /// ledger, because reality already contains whatever the app missed.
+    func recount(lot: Int64, observed: Double, precision: String) {
+        write { try Consumption(db: $0).adjust(lotId: lot, observed: observed, precision: precision) }
+    }
+
+    /// One write, then one reload. Every path through here re-derives the
+    /// screens and re-syncs the reminders, so a cooked lot stops being
+    /// reminded about without any separate bookkeeping.
+    private func write(_ body: (Database) throws -> Void) {
+        do {
+            guard let database else { return }
+            try body(database)
+            try reload()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
     /// Imports the hand-collected eleven-item pantry. Refuses if anything is
     /// already there, so it cannot double the ledger.
     func importStarterInventory() {

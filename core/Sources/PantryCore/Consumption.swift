@@ -19,16 +19,67 @@ public struct Draw: Sendable {
     public let amount: Double        // positive: how much leaves the lot
     public let unit: String
     public let precision: String
+
+    public init(
+        lotId: Int64, productId: Int64, productName: String,
+        amount: Double, unit: String, precision: String
+    ) {
+        self.lotId = lotId
+        self.productId = productId
+        self.productName = productName
+        self.amount = amount
+        self.unit = unit
+        self.precision = precision
+    }
+
+    /// The same draw with a different amount, and the precision that a
+    /// human-supplied number earns.
+    ///
+    /// ADR 003: a recipe amount is a *default*, not a decision. One tap
+    /// accepts it and it stays `derived`; typing a real number makes it
+    /// `measured`, because somebody looked. Overwriting the amount without
+    /// upgrading the precision would lose the fact that they did.
+    public func amended(to newAmount: Double) -> Draw {
+        Draw(lotId: lotId, productId: productId, productName: productName,
+             amount: newAmount, unit: unit,
+             precision: newAmount == amount ? precision : "measured")
+    }
 }
 
 /// What cooking a recipe would do, before anything is written.
-public struct CookPlan: Sendable {
+public struct CookPlan: Sendable, Identifiable {
+    /// The recipe it plans, which is what identifies it — you cannot be
+    /// part-way through cooking the same recipe twice at once.
+    public var id: Int64 { recipeId }
+
     public let recipeId: Int64
     public let recipeName: String
     public let draws: [Draw]
     public let problems: [String]
 
+    public init(recipeId: Int64, recipeName: String, draws: [Draw], problems: [String]) {
+        self.recipeId = recipeId
+        self.recipeName = recipeName
+        self.draws = draws
+        self.problems = problems
+    }
+
     public var isSatisfiable: Bool { problems.isEmpty }
+
+    /// The same plan with one lot's amount changed.
+    ///
+    /// Public so a screen can offer the editable default ADR 003 requires. The
+    /// problems are carried over untouched: they describe whether the recipe
+    /// can be made at all, and letting an edit clear them would turn "you do
+    /// not have this" into "you do" by typing.
+    public func amending(lotId: Int64, to amount: Double) -> CookPlan {
+        CookPlan(
+            recipeId: recipeId,
+            recipeName: recipeName,
+            draws: draws.map { $0.lotId == lotId ? $0.amended(to: amount) : $0 },
+            problems: problems
+        )
+    }
 }
 
 /// The write path: everything that removes food from the ledger.
